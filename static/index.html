@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>LLM 网关仪表盘</title>
+<style>
+  :root {
+    --bg:#0d1014; --card:#161a21; --card2:#1c2129; --border:#252b35;
+    --text:#e7eaf0; --muted:#8a93a6; --good:#34c17b; --warn:#e0a33e;
+    --bad:#e0574f; --accent:#4c8dff; --purple:#9a6cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.5 "Segoe UI","Microsoft YaHei",sans-serif}
+  header{padding:16px 26px;border-bottom:1px solid var(--border);
+         display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  h1{font-size:16px;margin:0;font-weight:600}
+  .sub{color:var(--muted);font-size:12px}
+  .gw{background:var(--card2);border:1px solid var(--border);border-radius:6px;
+      padding:4px 10px;font-family:Consolas,monospace;font-size:12px;color:var(--accent);cursor:pointer}
+  main{padding:20px 26px 50px}
+  .sec{margin-bottom:26px}
+  .sec-title{font-size:13px;color:var(--muted);text-transform:uppercase;
+             letter-spacing:.6px;margin:0 0 12px;font-weight:600}
+
+  /* 卡片网格 — 仪表盘的核心布局 */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px}
+  /* 节点列表比普通卡片需要更宽 (要放下勾选框 + 名字 + 标记 + 按钮) */
+  #regionGrid{grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:15px 17px;
+        transition:border-color .15s}
+  .card:hover{border-color:#333b48}
+  .card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+  .card-t{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0}
+  .dot.on{background:var(--good);box-shadow:0 0 7px var(--good)}
+  .dot.off{background:#3a4150}
+  .kpi{font-size:23px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+  .kpi.sm{font-size:17px}
+  .kpi-label{color:var(--muted);font-size:11px;margin-top:3px}
+  .card-row{display:flex;justify-content:space-between;gap:12px;margin-top:11px;
+            padding-top:11px;border-top:1px solid var(--border)}
+  .card-row > div{flex:1}
+  .bar{height:5px;background:#232935;border-radius:3px;overflow:hidden;margin-top:7px}
+  .bar > i{display:block;height:100%;border-radius:3px;transition:width .3s}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  tbody tr:hover{background:rgba(255,255,255,.02)}
+  .mono{font-family:Consolas,monospace;font-size:12px}
+  .muted{color:var(--muted)}
+  .good{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+
+  .toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:13px}
+  select,button,input{background:var(--card2);color:var(--text);border:1px solid var(--border);
+                      border-radius:6px;padding:6px 11px;font-size:13px;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .pill{padding:1px 7px;border-radius:9px;font-size:11px;border:1px solid var(--border);color:var(--muted)}
+  .toast{position:fixed;right:20px;bottom:20px;background:var(--card);
+         border:1px solid var(--border);border-left:3px solid var(--accent);
+         padding:12px 16px;border-radius:8px;max-width:480px;display:none;
+         white-space:pre-wrap;font-size:13px;z-index:99}
+  .chart{display:flex;align-items:flex-end;gap:2px;height:76px;margin-top:10px}
+  .chart > div{flex:1;background:linear-gradient(to top,var(--accent),var(--purple));
+               border-radius:2px 2px 0 0;min-height:1px}
+  .empty{color:var(--muted);font-size:13px;padding:18px 0;text-align:center}
+  .tabs{display:flex;gap:2px;margin-bottom:20px;border-bottom:1px solid var(--border)}
+  .tabs button{border:none;background:none;border-bottom:2px solid transparent;border-radius:0;
+               padding:9px 15px;color:var(--muted)}
+  .tabs button.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+  .panel{display:none} .panel.active{display:block}
+  .prog{height:4px;background:var(--card2);border-radius:2px;overflow:hidden;margin:10px 0}
+  .prog > i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+
+  /* 模型性能表 — 分组表头 + 每组一个色系 (参考同事的设计稿) */
+  .ptable th, .ptable td{padding:7px 9px;white-space:nowrap}
+  .ptable thead tr:first-child th{font-size:11px;text-align:center;letter-spacing:.3px;
+    color:var(--text);border-bottom:1px solid var(--border)}
+  .ptable thead tr:last-child th{font-size:11px;color:var(--muted);text-align:right;
+    padding-top:3px;padding-bottom:7px}
+  .ptable thead tr:last-child th.grp{font-weight:600}
+  .ptable td.num{text-align:right;font-family:Consolas,monospace;font-size:12px;
+    font-variant-numeric:tabular-nums}
+  .ptable tbody tr.main:hover{background:rgba(255,255,255,.03)}
+  /* 每个指标组一条底部分隔线, 视觉上把列分组 */
+  .ptable .g-ttft{background:rgba(224,163,62,.09)}
+  .ptable .g-dur{background:rgba(76,141,255,.09)}
+  .ptable .g-tps{background:rgba(154,108,255,.09)}
+  .ptable td.g-ttft{border-left:1px solid var(--border)}
+  .ptable td.g-tps{border-right:1px solid var(--border)}
+  .cellbar{height:3px;border-radius:2px;margin-top:3px;opacity:.75}
+  .mrow{cursor:pointer}
+  .expander{display:inline-block;width:11px;color:var(--muted);font-size:10px}
+
+  /* 状态徽标: 明确区分"禁用"和"不稳" */
+  .pill.bad-pill{border-color:var(--bad);color:var(--bad)}
+  .pill.warn-pill{border-color:var(--warn);color:var(--warn)}
+  .pill.good-pill{border-color:var(--good);color:var(--good)}
+
+  /* 节点行: 标记单独占一列, 不跟名字抢空间 (之前用 flex:1 会被挤没) */
+  .noderow{display:grid;grid-template-columns:16px minmax(0,1fr) auto 54px auto auto;
+           align-items:center;gap:8px;padding:7px 16px;font-size:12px;
+           border-bottom:1px solid #1b1f27}
+  .noderow input[type=checkbox]{margin:0;cursor:pointer}
+  .noderow .nodename{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .noderow .lat{text-align:right}
+  /* 没有检测标记时留一个窄占位, 避免各行名字宽度不一致 */
+  .noderow .badge-slot{display:flex;justify-content:flex-end}
+  .noderow .badge-slot:empty{display:none}
+
+  /* 滚动条: 深色细条, 和整体风格一致 (默认滚动条太亮太宽) */
+  *{scrollbar-width:thin;scrollbar-color:#2f3743 transparent}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#2f3743;border-radius:5px;
+    border:2px solid var(--card);background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:#3d4756;background-clip:padding-box}
+  ::-webkit-scrollbar-corner{background:transparent}
+
+  /* 配额表: 让进度条和数字对齐得好一点 */
+  .qtable th,.qtable td{padding:7px 10px}
+  .qtable tbody tr:hover{background:rgba(255,255,255,.03)}
+  .qtable tr.picked{background:rgba(76,141,255,.07)}
+
+  /* 拥堵分析: 每小时一根柱子 */
+  .heat{display:flex;gap:2px;align-items:flex-end;height:38px;margin-top:6px}
+  .heat > div{flex:1;border-radius:2px 2px 0 0;min-height:2px;position:relative}
+</style>
+</head>
+<body>
+<header>
+  <h1>LLM 网关仪表盘</h1>
+  <span class="sub">网关地址 <span class="gw" id="gwAddr">http://127.0.0.1:8787/v1</span> · 点击复制</span>
+</header>
+
+<main>
+<div class="tabs">
+  <button id="t-usage" class="active">用量总览</button>
+  <button id="t-models">模型性能</button>
+  <button id="t-providers">厂商配置</button>
+  <button id="t-nodes">节点测速</button>
+</div>
+
+<!-- ============ 用量总览 ============ -->
+<div class="panel active" id="p-usage">
+  <div class="sec">
+    <div class="toolbar">
+      <select id="winSel">
+        <option value="1">最近 1 小时</option>
+        <option value="6">最近 6 小时</option>
+        <option value="24" selected>最近 24 小时</option>
+        <option value="168">最近 7 天</option>
+        <option value="720">最近 30 天</option>
+      </select>
+      <button class="primary" id="refreshUsage">刷新</button>
+      <span class="sub" id="usageUpdated"></span>
+    </div>
+    <div class="grid" id="overviewCards"></div>
+  </div>
+
+  <div class="sec">
+    <h2 class="sec-title">Token 消耗趋势</h2>
+    <div class="card">
+      <div id="timelineChart" class="chart"></div>
+      <div class="card-row">
+        <div><div class="kpi sm" id="tlInput">0</div><div class="kpi-label">输入 token</div></div>
+        <div><div class="kpi sm" id="tlOutput">0</div><div class="kpi-label">输出 token</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2 class="sec-title">按厂商</h2>
+    <div class="grid" id="providerUsageCards"></div>
+  </div>
+
+  <div class="sec">
+    <h2 class="sec-title">按模型</h2>
+    <div class="card" style="padding:0">
+      <table><thead><tr>
+        <th>模型</th><th>厂商</th><th>请求数</th><th>输入 token</th><th>输出 token</th><th>平均首字延迟</th>
+      </tr></thead><tbody id="modelRows"><tr><td colspan="6" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 模型性能 ============ -->
+<div class="panel" id="p-models">
+  <div class="sec">
+    <div class="toolbar">
+      <select id="mWinSel">
+        <option value="24">最近 24 小时</option>
+        <option value="168" selected>最近 7 天</option>
+        <option value="720">最近 30 天</option>
+        <option value="8760">全部</option>
+      </select>
+      <button class="primary" id="refreshModels">刷新</button>
+      <span class="sub">按「厂商 + 模型」聚合 · 点任意一行展开逐条明细</span>
+    </div><div class="sub" style="margin-bottom:11px">
+      <b>TTFT</b> 首字延迟（响应起手速度，越小越好） ·
+      <b>耗时</b> 单次请求总时长 ·
+      <b>TPS</b> 生成吞吐量（每秒输出 token，越大越快） ·
+      <b>成本</b> 按内置单价表估算（表里没有的模型不显示，可用 <span class="mono">pricing.json</span> 覆盖）
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="ptable">
+        <thead>
+          <tr>
+            <th rowspan="2" style="width:22px"></th>
+            <th rowspan="2">模型</th>
+            <th rowspan="2">来源</th>
+            <th rowspan="2" style="text-align:right">请求</th>
+            <th rowspan="2" style="text-align:right">Token</th>
+            <th rowspan="2" style="text-align:right">成本</th>
+            <th colspan="5" class="g-ttft">TTFT (s)</th>
+            <th colspan="5" class="g-dur">耗时 (s)</th>
+            <th colspan="5" class="g-tps">TPS</th>
+          </tr>
+          <tr>
+            <th class="grp g-ttft">avg</th><th class="g-ttft">P50</th><th class="g-ttft">P90</th><th class="g-ttft">P95</th><th class="g-ttft">P99</th>
+            <th class="grp g-dur">avg</th><th class="g-dur">P50</th><th class="g-dur">P90</th><th class="g-dur">P95</th><th class="g-dur">P99</th>
+            <th class="grp g-tps">avg</th><th class="g-tps">P50</th><th class="g-tps">P90</th><th class="g-tps">P95</th><th class="g-tps">P99</th>
+          </tr>
+        </thead>
+        <tbody id="modelStatRows">
+          <tr><td colspan="20" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2 class="sec-title">拥堵分析 — 什么时段该换模型</h2>
+    <div class="sub" style="margin-bottom:11px">
+      按<b>本地小时</b>聚合网关流量，<b>每个模型单独统计</b>。柱子越高 = 那个时段越慢。
+      <b>拥堵倍数</b>是最慢时段 ÷ 最快时段，超过 2 倍说明有明显时段差异，高峰期可以临时换个模型。
+      <br>柱子用的是<b>归一化后</b>的 TTFT：先按每个模型的「prompt 长度 → 首字延迟」关系把
+      各请求折算到同一基准，再取中位数。这样"某个时段正好在处理大文件"不会被误判成拥堵。
+      鼠标悬停能看到原始值。
+    </div>
+    <div id="congestionCards" class="grid"></div>
+  </div>
+</div>
+
+<!-- ============ 厂商配置 ============ -->
+<div class="panel" id="p-providers">
+  <div class="sec">
+    <div class="toolbar">
+      <button class="primary" id="refreshProviders">刷新</button>
+      <button id="checkBalances">查询全部余额</button>
+      <button id="addCustomBtn">+ 添加自定义端点</button>
+      <span class="sub">修改后立即生效，无需重启</span>
+    </div>
+    <div class="grid" id="providerCards"></div>
+  </div>
+
+  <div class="sec" id="customFormSec" style="display:none">
+    <h2 class="sec-title">添加自定义 OpenAI 兼容端点</h2>
+    <div class="card" style="max-width:560px">
+      <div style="display:grid;gap:11px">
+        <label class="sub">名称<br><input id="cfName" style="width:100%;cursor:text" placeholder="例如 智谱 GLM"></label>
+        <label class="sub">Base URL<br><input id="cfUrl" style="width:100%;cursor:text" placeholder="https://open.bigmodel.cn/api/paas/v4"></label>
+        <label class="sub">API Key<br><input id="cfKey" type="password" style="width:100%;cursor:text" placeholder="sk-..."></label>
+        <div style="display:flex;gap:9px">
+          <button class="primary" id="cfSave">保存</button>
+          <button id="cfCancel">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-h" style="margin-bottom:9px">
+        <div class="card-t">Antigravity 订阅配额</div>
+        <span class="pill" id="quotaSummary">未加载</span>
+      </div>
+      <div class="sub" style="margin-bottom:11px">
+        复用 Antigravity 的 OAuth 凭据（Google Pro 会员）。它走 Google 内部 API，
+        <b>不经过网关</b>，所以实测结果以
+        <span class="pill" style="border-color:var(--purple);color:var(--purple)">基准</span>
+        标记出现在「模型性能」页 —— 没有 token 量和成本，但延迟和速度是真测的。
+      </div>
+      <div class="toolbar" style="margin-bottom:0">
+        <button class="primary" id="loadQuota">刷新配额</button>
+        <label class="sub"><input type="checkbox" id="onlyAvail" checked> 只看有配额的</label>
+        <label class="sub"><input type="checkbox" id="onlyRec"> 只看推荐的</label>
+        <span class="sub">|</span>
+        <button id="benchSelected">测试勾选的模型</button>
+        <button id="benchTop">测试前 3 个推荐</button>
+        <span class="sub" id="benchProgress"></span>
+      </div>
+      <div class="prog"><i id="mbar"></i></div>
+    </div>
+
+    <div class="card" style="padding:0;max-height:460px;overflow-y:auto">
+      <table class="qtable"><thead><tr>
+        <th style="width:30px"><input type="checkbox" id="qCheckAll" title="全选/全不选"></th>
+        <th>模型</th>
+        <th style="width:34%">剩余配额</th>
+        <th>重置时间</th>
+        <th style="text-align:right">TTFT</th>
+        <th style="text-align:right">速度</th>
+      </tr></thead><tbody id="quotaRows">
+        <tr><td colspan="6" class="empty">点「刷新配额」加载</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2 class="sec-title">Gemini 节点可用性</h2>
+    <div class="card">
+      <div class="sub" style="margin-bottom:11px">
+        Google 对 Antigravity 调用有地区风控，部分出口 IP 会被
+        <span class="mono">User location is not supported</span> 拒掉 —— 同一国家不同 IP 段也可能一个通一个不通。
+        <br>在下面<b>勾选要用的节点</b>（不勾就不测，避免无谓的节点切换），每个节点会测
+        <b id="attemptsLabel">3</b> 次（单次失败可能只是网络抖动）。<b>测完自动切回你原来的节点。</b>
+      </div>
+      <div class="toolbar">
+        <button class="primary" id="checkNodes">检测勾选的节点</button>
+        <button id="selectAllNodes">全选</button>
+        <button id="clearNodes">清空</button>
+        <label class="sub">每节点测
+          <select id="nodeAttempts" style="padding:2px 6px">
+            <option value="1">1 次</option>
+            <option value="3" selected>3 次</option>
+            <option value="5">5 次</option>
+          </select>
+        </label>
+        <span class="sub" id="nodeCheckStatus"></span>
+      </div>
+      <div class="prog"><i id="ncbar"></i></div>
+      <div id="nodeCheckResults"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 节点测速 ============ -->
+<div class="panel" id="p-nodes">
+  <div class="sec">
+    <div class="toolbar">
+      <select id="timeoutSel">
+        <option value="3000">超时 3s</option>
+        <option value="5000" selected>超时 5s</option>
+        <option value="8000">超时 8s</option>
+      </select>
+      <select id="sortModeSel">
+        <option value="region">按地区分组</option>
+        <option value="latency">按延迟排序</option>
+        <option value="status">可用的排前面</option>
+      </select>
+      <button class="primary" id="testAll">测速全部</button>
+      <button id="testFailed">仅测失败</button>
+      <button id="collapseAll">全部收起</button>
+      <span class="sub" id="nodeStatus">连接中…</span>
+    </div>
+    <div class="sub" style="margin-bottom:9px">
+      勾选节点后可在「厂商配置 → Gemini 节点可用性」里批量检测 Google 可用性；
+      检测结论会标在节点名后面：<span class="pill good-pill">✓ Gemini</span> 可用 ·
+      <span class="pill warn-pill">⚠ Gemini</span> 不稳 ·
+      <span class="pill bad-pill">✗ Gemini</span> 被地区限制（悬停看详情）。
+    </div>
+    <div class="prog"><i id="nbar"></i></div>
+    <div class="grid" id="nodeKpis"></div>
+  </div>
+
+  <div class="sec">
+    <div class="grid" id="regionGrid"></div>
+  </div>
+</div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let MODELS = [], BENCH = {};
+
+function toast(msg, ms=5000){ const t=$('toast'); t.textContent=msg; t.style.display='block';
+  clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none', ms); }
+function fmt(n){ return n==null ? '—' : Number(n).toLocaleString(); }
+function pctColor(p){ return p==null?'var(--muted)': p>50?'var(--good)': p>20?'var(--warn)':'var(--bad)'; }
+
+$('gwAddr').onclick = () => { navigator.clipboard.writeText($('gwAddr').textContent); toast('网关地址已复制'); };
+
+// ---------- tabs ----------
+const TABS = { usage:'p-usage', models:'p-models', providers:'p-providers', nodes:'p-nodes' };
+Object.keys(TABS).forEach(k => {
+  $('t-'+k).onclick = () => {
+    Object.entries(TABS).forEach(([kk,v]) => {
+      $('t-'+kk).classList.toggle('active', kk===k);
+      $(v).classList.toggle('active', kk===k);
+    });
+    if (k==='usage') loadUsage();
+    if (k==='models') { loadModelStats(); loadCongestion(); }
+    if (k==='providers') loadProviders();
+    if (k==='nodes') loadNodes();
+  };
+});
+
+// ==================== 用量总览 ====================
+async function loadUsage(){
+  const h = $('winSel').value;
+  const [sum, prov, mod, tl] = await Promise.all([
+    fetch(`/api/usage/summary?hours=${h}`).then(r=>r.json()),
+    fetch(`/api/usage/by_provider?hours=${h}`).then(r=>r.json()),
+    fetch(`/api/usage/by_model?hours=${h}`).then(r=>r.json()),
+    fetch(`/api/usage/timeline?hours=${h}&buckets=28`).then(r=>r.json()),
+  ]);
+  $('usageUpdated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+
+  $('overviewCards').innerHTML = `
+    ${kpiCard('总请求数', fmt(sum.requests), sum.errors ? `${sum.errors} 个失败` : '全部成功')}
+    ${kpiCard('Token 总消耗', fmt(sum.total_tokens), `输入 ${fmt(sum.input_tokens)} / 输出 ${fmt(sum.output_tokens)}`)}
+    ${kpiCard('平均首字延迟', sum.avg_ttft!=null ? sum.avg_ttft+' ms' : '—', 'TTFT，体感流畅度关键指标')}
+    ${kpiCard('平均总耗时', sum.avg_duration!=null ? (sum.avg_duration/1000).toFixed(1)+' s' : '—', '单次请求完整耗时')}
+    ${kpiCard('活跃厂商', (prov.providers||[]).length, '窗口内有调用的厂商数')}
+  `;
+
+  const ps = prov.providers || [];
+  $('providerUsageCards').innerHTML = ps.length ? ps.map(p => {
+    const tot = p.total_tokens || 0;
+    const max = Math.max(...ps.map(x=>x.total_tokens||0), 1);
+    return `<div class="card">
+      <div class="card-h"><div class="card-t">${p.provider}</div>
+        <span class="pill">${p.requests} 次</span></div>
+      <div class="kpi">${fmt(tot)}</div>
+      <div class="kpi-label">token 消耗</div>
+      <div class="bar"><i style="width:${(tot/max*100).toFixed(0)}%;background:var(--accent)"></i></div>
+      <div class="card-row">
+        <div><div class="kpi sm">${fmt(p.input_tokens)}</div><div class="kpi-label">输入</div></div>
+        <div><div class="kpi sm">${fmt(p.output_tokens)}</div><div class="kpi-label">输出</div></div>
+        <div><div class="kpi sm">${p.avg_ttft!=null?p.avg_ttft+'ms':'—'}</div><div class="kpi-label">首字延迟</div></div>
+      </div></div>`;
+  }).join('') : '<div class="card empty">窗口内还没有请求记录</div>';
+
+  const ms = mod.models || [];
+  $('modelRows').innerHTML = ms.length ? ms.map(m => `<tr>
+    <td class="mono">${m.model}</td><td><span class="pill">${m.provider}</span></td>
+    <td>${fmt(m.requests)}</td><td>${fmt(m.input_tokens)}</td><td>${fmt(m.output_tokens)}</td>
+    <td>${m.avg_ttft!=null?m.avg_ttft+' ms':'—'}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>';
+
+  const items = tl.timeline || [];
+  const maxV = Math.max(...items.map(x => x.input+x.output), 1);
+  $('timelineChart').innerHTML = items.map(x => {
+    const v = x.input + x.output;
+    const hh = Math.max(1, v/maxV*100);
+    return `<div style="height:${hh}%" title="${v} tokens"></div>`;
+  }).join('');
+  $('tlInput').textContent = fmt(items.reduce((s,x)=>s+x.input,0));
+  $('tlOutput').textContent = fmt(items.reduce((s,x)=>s+x.output,0));
+}
+function kpiCard(label, value, sub){
+  return `<div class="card"><div class="kpi-label">${label}</div>
+    <div class="kpi">${value}</div><div class="kpi-label">${sub}</div></div>`;
+}
+$('refreshUsage').onclick = loadUsage;
+$('winSel').onchange = loadUsage;
+
+// ==================== 模型性能 ====================
+let MODEL_STATS = [];
+
+// 每个指标组的色系, 和表头底色对应
+const GROUP_COLORS = { ttft:'var(--warn)', duration:'var(--accent)', tps:'var(--purple)' };
+
+// 毫秒 -> 秒 (设计稿统一用秒)
+function sec(ms){ return ms==null ? '—' : (ms/1000).toFixed(1); }
+function tps1(v){ return v==null ? '—' : v.toFixed(1); }
+
+// 一组分位数渲染成 5 个单元格. 列尾带一条按比例的长度条, 横向一眼比出快慢.
+function pctCells(group, key, maxVal, fmtFn){
+  const m = group || {};
+  const color = GROUP_COLORS[key];
+  const vals = ['avg','p50','p90','p95','p99'];
+  const bar = (v) => {
+    const w = (maxVal>0 && v!=null) ? Math.max(2, Math.min(100, v/maxVal*100)) : 0;
+    return w ? `<div class="cellbar" style="width:${w.toFixed(0)}%;background:${color}"></div>` : '';
+  };
+  return vals.map((k,i) => {
+    const v = m[k];
+    const cls = k==='avg' ? 'num grp ' : 'num ';
+    return `<td class="${cls}${'g-'+key}">${fmtFn(v)}${bar(v)}</td>`;
+  }).join('');
+}
+
+async function loadModelStats(){
+  const h = $('mWinSel').value;
+  const r = await fetch(`/api/usage/model_stats?hours=${h}`).then(x=>x.json());
+  MODEL_STATS = r.stats || [];
+  if (!MODEL_STATS.length) {
+    $('modelStatRows').innerHTML = '<tr><td colspan="20" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>';
+    return;
+  }
+  // 每组的最大值, 用来归一化色条长度
+  const maxOf = (key, field) => Math.max(...MODEL_STATS.map(s=>(s[key]||{})[field]||0), 1);
+  const maxTtft = maxOf('ttft','p99'), maxDur = maxOf('duration','p99'), maxTps = maxOf('tps','p99');
+
+  $('modelStatRows').innerHTML = MODEL_STATS.map((s,i) => {
+    const tps = s.tps || {};
+    const cost = s.cost!=null
+      ? `${s.currency==='CNY'?'¥':''}${s.cost.toFixed(2)}`
+      : '—';
+    // 来源: 网关=真实流量(有 token/成本); 基准=只能测延迟和速度
+    const src = s.source==='bench'
+      ? '<span class="pill" style="border-color:var(--purple);color:var(--purple)">基准</span>'
+      : s.source==='gateway+bench'
+        ? `<span class="pill" title="网关流量为主, 另有 ${s.bench_requests} 次基准测试">网关+基准</span>`
+        : '<span class="pill">网关</span>';
+    return `
+    <tr class="main mrow" onclick="toggleModelDetail(${i})">
+      <td><span class="expander" id="arrow-${i}">▸</span></td>
+      <td><div class="mono" style="font-weight:600">${s.model}</div>
+          <div class="kpi-label"><span class="pill">${s.provider}</span>
+            ${s.errors?` <span class="bad">${s.errors} 失败</span>`:''}</div></td>
+      <td>${src}</td>
+      <td class="num">${s.requests?fmt(s.requests):'—'}</td>
+      <td class="num">${s.total_tokens?fmt(s.total_tokens):'—'}</td>
+      <td class="num">${cost}</td>
+      ${pctCells(s.ttft, 'ttft', maxTtft, sec)}
+      ${pctCells(s.duration, 'duration', maxDur, sec)}
+      ${pctCells(tps, 'tps', maxTps, tps1)}
+    </tr>
+    <tr id="detail-${i}" style="display:none"><td colspan="20" style="padding:0;background:#12151b">
+      <div id="detailBody-${i}" style="padding:12px 16px" class="muted">加载中…</div>
+    </td></tr>`;
+  }).join('');
+}
+
+window.toggleModelDetail = async (i) => {
+  const row = $('detail-'+i);
+  const arrow = $('arrow-'+i);
+  const open = row.style.display !== 'none';
+  if (open) { row.style.display='none'; arrow.textContent='▸'; return; }
+  row.style.display='table-row'; arrow.textContent='▾';
+  const s = MODEL_STATS[i];
+  const body = $('detailBody-'+i);
+  body.textContent = '加载中…';
+  const q = `provider=${encodeURIComponent(s.provider)}&model=${encodeURIComponent(s.model)}&limit=100`;
+
+  // 基准数据 (Antigravity 那些走不了网关的模型) 没有网关明细, 看基准记录
+  if (s.source === 'bench') {
+    const r = await fetch(`/api/usage/benchmark_detail?${q}`).then(x=>x.json());
+    const bs = r.benchmarks || [];
+    if (!bs.length) { body.textContent = '无明细'; return; }
+    body.innerHTML = `
+      <div class="sub" style="margin-bottom:8px">
+        ${s.provider} / ${s.model} · 共 ${s.bench_requests} 次基准测试
+        · 数据来自 Antigravity 直连测试（不经过网关，所以没有 token 量和成本）
+      </div>
+      <table style="font-size:12px"><thead><tr>
+        <th>时间</th><th>TTFT</th><th>TPS</th><th>总耗时</th><th>输出 token</th><th>状态</th>
+      </tr></thead><tbody>${bs.map(b=>`<tr>
+        <td class="muted">${new Date(b.ts).toLocaleString('zh-CN')}</td>
+        <td>${b.ttft_ms!=null?sec(b.ttft_ms)+' s':'—'}</td>
+        <td>${b.tokens_per_sec!=null?tps1(b.tokens_per_sec):'—'}</td>
+        <td>${b.total_ms!=null?sec(b.total_ms)+' s':'—'}</td>
+        <td>${b.tokens??'—'}</td>
+        <td class="${b.error?'bad':'good'}">${b.error?(b.error.slice(0,60)):'成功'}</td>
+      </tr>`).join('')}</tbody></table>`;
+    return;
+  }
+
+  const r = await fetch(`/api/usage/model_detail?${q}`).then(x=>x.json());
+  const reqs = r.requests || [];
+  if (!reqs.length) { body.textContent = '无明细'; return; }
+  body.innerHTML = `
+    <div class="sub" style="margin-bottom:8px">
+      ${s.provider} / ${s.model} · 共 ${s.requests} 次请求 · 平均输入 ${fmt(s.avg_input)} / 输出 ${fmt(s.avg_output)} token
+      · 输出输入比 ${s.io_ratio??'—'} · 客户端 ${s.clients||'—'}
+      ${s.cost!=null?` · 成本估算 ¥${s.cost.toFixed(2)}`:''}
+    </div>
+    <table style="font-size:12px"><thead><tr>
+      <th>时间</th><th>客户端</th><th>输入</th><th>输出</th>
+      <th>TTFT</th><th>TPS</th><th>总耗时</th><th>流式</th><th>状态</th>
+    </tr></thead><tbody>${reqs.map(q=>`<tr>
+      <td class="muted">${new Date(q.ts).toLocaleString('zh-CN')}</td>
+      <td><span class="pill">${q.client||'—'}</span></td>
+      <td>${fmt(q.input_tokens)}</td><td>${fmt(q.output_tokens)}</td>
+      <td>${q.ttft_ms!=null?sec(q.ttft_ms)+' s':'—'}</td>
+      <td>${q.speed_tps!=null?tps1(q.speed_tps):'—'}</td>
+      <td>${q.duration_ms!=null?sec(q.duration_ms)+' s':'—'}</td>
+      <td class="muted">${q.stream?'✓':'—'}</td>
+      <td class="${q.status>=400?'bad':'good'}">${q.status}</td>
+    </tr>`).join('')}</tbody></table>`;
+};
+$('refreshModels').onclick = loadModelStats;
+$('mWinSel').onchange = loadModelStats;
+
+// 拥堵分析: 每个模型一张卡, 画 24 小时的热力柱
+async function loadCongestion(){
+  const h = $('mWinSel').value;
+  const r = await fetch(`/api/usage/congestion?hours=${h}`).then(x=>x.json());
+  const models = r.models || [];
+  if (!models.length) {
+    $('congestionCards').innerHTML =
+      '<div class="card empty">样本还不够 — 至少要有 2 个时段、每个时段 3 次请求才能比较</div>';
+    return;
+  }
+  $('congestionCards').innerHTML = models.map(m => {
+    // 补齐 0-23 小时, 没数据的时段留空
+    const byHour = {};
+    (m.hourly||[]).forEach(x => byHour[x.hour] = x);
+    // 用归一化后的值画柱子: 已消除 prompt 长度差异, 反映的是模型本身的快慢
+    const vals = (m.hourly||[]).map(x=>x.norm_ttft||0);
+    const maxTtft = Math.max(...vals, 1);
+    const ratio = m.congestion_ratio;
+    const ratioCls = ratio==null?'muted': ratio>=2?'bad': ratio>=1.4?'warn':'good';
+    const bars = Array.from({length:24}, (_,h) => {
+      const x = byHour[h];
+      if (!x || x.norm_ttft==null)
+        return `<div style="height:2px;background:#2a3038" title="${h}:00 无数据"></div>`;
+      const pct = Math.max(6, x.norm_ttft/maxTtft*100);
+      const c = x.norm_ttft/maxTtft > 0.75 ? 'var(--bad)'
+              : x.norm_ttft/maxTtft > 0.45 ? 'var(--warn)' : 'var(--good)';
+      return `<div style="height:${pct.toFixed(0)}%;background:${c}"
+        title="${h}:00 · ${(x.norm_ttft/1000).toFixed(2)}s（原始 ${(x.median_ttft/1000).toFixed(2)}s · prompt 中位 ${fmt(x.median_input)}）· ${x.requests} 次${x.median_tps?' · '+x.median_tps+' tok/s':''}"></div>`;
+    }).join('');
+    return `<div class="card">
+      <div class="card-h" style="margin-bottom:7px">
+        <div class="card-t" style="font-size:13px">
+          <span class="mono">${m.model}</span>
+          <span class="pill">${m.provider}</span>
+        </div>
+        <span class="pill" style="border-color:var(--${ratioCls==='muted'?'border':ratioCls==='bad'?'bad':ratioCls==='warn'?'warn':'good'});color:var(--${ratioCls==='muted'?'muted':ratioCls})">
+          拥堵 ${ratio!=null?ratio+'×':'—'}
+        </span>
+      </div>
+      <div class="heat">${bars}</div>
+      <div class="card-row" style="margin-top:9px;padding-top:9px">
+        <div><div class="kpi sm good">${(m.best_ttft/1000).toFixed(1)}s</div>
+             <div class="kpi-label">最快 ${m.best_hour}:00</div></div>
+        <div><div class="kpi sm bad">${(m.worst_ttft/1000).toFixed(1)}s</div>
+             <div class="kpi-label">最慢 ${m.worst_hour}:00</div></div>
+        <div><div class="kpi sm">${fmt(m.samples)}</div>
+             <div class="kpi-label">样本 · ${m.hours_covered} 个时段</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+$('refreshModels').addEventListener('click', loadCongestion);
+$('mWinSel').addEventListener('change', loadCongestion);
+
+// ==================== 厂商配置 ====================
+let PROVIDERS = [];
+
+async function loadProviders(){
+  const r = await fetch('/api/providers').then(x=>x.json());
+  PROVIDERS = r.providers || [];
+  $('providerCards').innerHTML = PROVIDERS.map(p => `<div class="card">
+    <div class="card-h">
+      <div class="card-t"><span class="dot ${p.configured?'on':'off'}"></span>${p.name}</div>
+      <span class="pill">${p.custom?'自定义':p.kind}</span>
+    </div>
+    <div class="kpi sm ${p.configured?'good':'muted'}" id="bal-${p.id}">
+      ${p.configured ? (p.api_key_masked || '已配置') : '未配置 key'}
+    </div>
+    <div id="plan-${p.id}"></div>
+    <div style="display:grid;gap:7px;margin-top:11px">
+      <label class="sub">API Key
+        <input type="password" id="key-${p.id}" style="width:100%;cursor:text"
+               placeholder="${p.configured?'留空则保持不变':'填入 key'}">
+      </label>
+      <label class="sub">Base URL
+        <input id="url-${p.id}" style="width:100%;cursor:text" value="${p.base_url}"
+               placeholder="${p.default_base_url||'https://...'}">
+      </label>
+      <div style="display:flex;gap:7px">
+        <button class="primary" style="flex:1" onclick="saveProvider('${p.id}')">保存</button>
+        <button onclick="testProvider('${p.id}')">测试</button>
+        ${p.custom?`<button onclick="removeCustom('${p.id}')" title="删除">×</button>`:''}
+      </div>
+    </div>
+    <div id="pm-${p.id}" class="kpi-label" style="margin-top:8px"></div>
+  </div>`).join('');
+}
+
+window.saveProvider = async (pid) => {
+  const key = $('key-'+pid).value;
+  const url = $('url-'+pid).value;
+  const body = {};
+  if (key.trim()) body.api_key = key.trim();
+  const p = PROVIDERS.find(x=>x.id===pid);
+  if (url.trim() && url.trim() !== p.base_url) body.base_url = url.trim();
+  if (!Object.keys(body).length) { toast('没有改动'); return; }
+  const r = await fetch(`/api/providers/${pid}/config`, {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(x=>x.json());
+  if (r.ok) { toast(`${p.name} 已保存并生效`); loadProviders(); }
+  else toast('保存失败: '+r.error, 8000);
+};
+
+window.testProvider = async (pid) => {
+  const el = $('pm-'+pid);
+  el.textContent = '测试中…';
+  const r = await fetch(`/api/providers/${pid}/models`, {method:'POST'}).then(x=>x.json());
+  if (r.ok) {
+    el.className = 'kpi-label good';
+    el.textContent = `✓ 连通 · ${r.models.length} 个模型: ${r.models.slice(0,4).join(', ')}${r.models.length>4?' …':''}`;
+  } else {
+    el.className = 'kpi-label bad';
+    el.textContent = '✗ ' + (r.error||'').slice(0,120);
+  }
+};
+
+window.removeCustom = async (pid) => {
+  if (!confirm(`删除自定义端点 ${pid}?`)) return;
+  const r = await fetch(`/api/providers/custom/${pid}`, {method:'DELETE'}).then(x=>x.json());
+  if (r.ok) { toast('已删除'); loadProviders(); } else toast('删除失败: '+r.error);
+};
+
+$('refreshProviders').onclick = loadProviders;
+$('addCustomBtn').onclick = () => {
+  const sec = $('customFormSec');
+  sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
+};
+$('cfCancel').onclick = () => { $('customFormSec').style.display='none'; };
+$('cfSave').onclick = async () => {
+  const name = $('cfName').value.trim(), url = $('cfUrl').value.trim(), key = $('cfKey').value.trim();
+  if (!name || !url) { toast('名称和 Base URL 必填'); return; }
+  const r = await fetch('/api/providers/custom', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name, base_url:url, api_key:key})}).then(x=>x.json());
+  if (r.ok) {
+    toast(`已添加 ${name}`);
+    $('cfName').value=$('cfUrl').value=$('cfKey').value='';
+    $('customFormSec').style.display='none';
+    loadProviders();
+  } else toast('添加失败: '+r.error, 8000);
+};
+
+$('checkBalances').onclick = async () => {
+  for (const p of PROVIDERS.filter(x=>x.configured)) {
+    const b = await fetch(`/api/providers/${p.id}/balance`, {method:'POST'}).then(x=>x.json());
+    const el = $('bal-'+p.id);
+    if (!el) continue;
+    if (b.available === false) {
+      el.className='kpi sm bad';
+      el.textContent = '查询失败: ' + (b.error||'').slice(0,50);
+    } else if (b.kind==='balance') {
+      el.className='kpi sm good';
+      el.textContent = `${b.total} ${b.currency||''} 可用`;
+    } else if (b.kind==='plan') {
+      el.className='kpi sm';
+      el.textContent = '套餐额度';
+      renderPlanWindows(p.id, b.windows||[]);
+    } else {
+      el.className='kpi sm';
+      const note = (b.raw&&b.raw.note) || '无余额接口';
+      // 厂商给了控制台地址就做成可点的, 省得用户自己找
+      const url = b.raw && b.raw.console;
+      el.innerHTML = url
+        ? `${note}<br><a href="${url}" target="_blank" rel="noopener"
+             style="color:var(--accent);font-size:11px">打开控制台 ↗</a>`
+        : note;
+    }
+  }
+  toast('余额查询完成');
+};
+
+// 套餐制 (Kimi Coding Plan): 每个时间窗一条进度条, 显示已用百分比和重置时间
+window.renderPlanWindows = (pid, windows) => {
+  const box = $('plan-'+pid);
+  if (!box) return;
+  box.innerHTML = windows.map(w => {
+    const used = w.used_pct;
+    // 已用越多越危险: <50% 绿, <80% 黄, 否则红
+    const color = used==null ? 'var(--muted)'
+      : used<50 ? 'var(--good)' : used<80 ? 'var(--warn)' : 'var(--bad)';
+    const reset = w.reset_time ? new Date(w.reset_time).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : null;
+    const counts = (w.used!=null && w.limit!=null) ? ` <span class="muted">(${w.used}/${w.limit})</span>` : '';
+    return `<div style="margin-top:7px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11px">
+        <span>${w.label}${counts}</span>
+        <span class="mono" style="color:${color}">${used!=null?used+'% 已用':'—'}</span>
+      </div>
+      <div class="bar" style="margin-top:3px"><i style="width:${used??0}%;background:${color}"></i></div>
+      ${reset?`<div class="kpi-label">${reset} 重置</div>`:''}
+    </div>`;
+  }).join('');
+};
+
+async function loadQuota(){
+  $('loadQuota').disabled = true; $('loadQuota').textContent='加载中…';
+  try {
+    const r = await fetch('/api/models/quota').then(x=>x.json());
+    if (r.ok) {
+      MODELS = r.models;
+      renderQuota();
+      const avail = MODELS.filter(m=>m.remaining>0).length;
+      $('quotaSummary').textContent = `${MODELS.length} 个模型 · ${avail} 个有额度`;
+      toast(`已加载 ${MODELS.length} 个模型`);
+    } else toast('加载失败: '+r.error, 10000);
+  } finally { $('loadQuota').disabled=false; $('loadQuota').textContent='刷新配额'; }
+}
+
+function quotaFiltered(){
+  const onlyAvail = $('onlyAvail').checked, onlyRec = $('onlyRec').checked;
+  return MODELS.filter(m => (!onlyAvail || (m.remaining!=null && m.remaining>0))
+                         && (!onlyRec || m.recommended));
+}
+
+// 厂商给的是内部枚举名 (MODEL_PROVIDER_GOOGLE), 转成人话
+function prettyProvider(p){
+  if (!p) return '';
+  return p.replace(/^MODEL_PROVIDER_/,'').toLowerCase()
+          .replace(/^\w/, c => c.toUpperCase());
+}
+
+function renderQuota(){
+  const list = quotaFiltered();
+  $('quotaRows').innerHTML = list.map(m => {
+    const b = BENCH[m.id] || {};
+    const picked = QUOTA_PICKS.has(m.id);
+    const pct = m.remaining;
+    return `<tr class="${picked?'picked':''}">
+      <td><input type="checkbox" ${picked?'checked':''} onchange="toggleQuotaPick('${m.id}', this.checked)" style="cursor:pointer"></td>
+      <td><div class="mono" style="font-weight:600">${m.id}</div>
+          <div class="kpi-label">${prettyProvider(m.provider)}${m.recommended?' <span class="pill">推荐</span>':''}${m.thinking?' <span class="pill">思考</span>':''}</div></td>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div class="bar" style="flex:1;margin:0"><i style="width:${pct??0}%;background:${pctColor(pct)}"></i></div>
+        <span class="mono" style="color:${pctColor(pct)};min-width:46px;text-align:right">${pct!=null?pct+'%':'—'}</span>
+      </div></td>
+      <td class="muted" style="font-size:11px">${m.reset_time?new Date(m.reset_time).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}</td>
+      <td class="num">${b.ttft_ms!=null?(b.ttft_ms/1000).toFixed(1)+' s':'—'}</td>
+      <td class="num">${b.tokens_per_sec!=null?b.tokens_per_sec.toFixed(1):'—'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="empty">没有符合条件的模型</td></tr>';
+  // 让 BENCH 里已测过的模型也能显示速度 (从模型性能页拿基准数据)
+  fillBenchFromStats();
+}
+
+// 基准结果存在数据库里, 这里拉一次补到配额表的速度列
+async function fillBenchFromStats(){
+  try {
+    const r = await fetch('/api/usage/model_stats?hours=8760').then(x=>x.json());
+    let changed = false;
+    for (const s of (r.stats||[])) {
+      if (s.source!=='bench') continue;
+      if (!BENCH[s.model]) {
+        BENCH[s.model] = {ttft_ms: s.ttft && s.ttft.avg, tokens_per_sec: s.tps && s.tps.avg};
+        changed = true;
+      }
+    }
+    if (changed) {
+      // 只重画数字列, 避免无限递归
+      for (const m of quotaFiltered()) {
+        const b = BENCH[m.id]; if (!b) continue;
+        const tr = [...document.querySelectorAll('#quotaRows tr')].find(
+          t => t.querySelector('.mono')?.textContent?.trim() === m.id);
+        if (tr) {
+          const tds = tr.querySelectorAll('td');
+          tds[4].textContent = b.ttft_ms!=null ? (b.ttft_ms/1000).toFixed(1)+' s' : '—';
+          tds[5].textContent = b.tokens_per_sec!=null ? b.tokens_per_sec.toFixed(1) : '—';
+        }
+      }
+    }
+  } catch(e) { /* 拿不到就算了, 不影响配额显示 */ }
+}
+
+window.toggleQuotaPick = (id, on) => {
+  if (on) QUOTA_PICKS.add(id); else QUOTA_PICKS.delete(id);
+  renderQuota();
+};
+$('loadQuota').onclick = loadQuota;
+$('onlyAvail').onchange = renderQuota;
+$('onlyRec').onchange = renderQuota;
+$('qCheckAll').onchange = (e) => {
+  const list = quotaFiltered();
+  if (e.target.checked) list.forEach(m=>QUOTA_PICKS.add(m.id));
+  else list.forEach(m=>QUOTA_PICKS.delete(m.id));
+  renderQuota();
+};
+
+// 测试勾选的模型 (而不是写死"前 3 个推荐")
+async function runBench(models){
+  if (!models.length) { toast('先勾选要测的模型'); return; }
+  const btns = [$('benchSelected'), $('benchTop')];
+  btns.forEach(b=>b.disabled=true);
+  $('benchProgress').textContent = `0/${models.length}`;
+  const {job_id} = await fetch('/api/models/benchmark', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({models, max_tokens:2048})}).then(x=>x.json());
+  if (!job_id) { toast('启动失败'); btns.forEach(b=>b.disabled=false); return; }
+  while (true) {
+    const j = await fetch(`/api/models/benchmark/${job_id}`).then(x=>x.json());
+    Object.assign(BENCH, j.results);
+    $('mbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
+    $('benchProgress').textContent = `${j.done}/${j.total}`;
+    renderQuota();
+    if (j.status!=='running') break;
+    await new Promise(r=>setTimeout(r,600));
+  }
+  $('mbar').style.width='0%';
+  $('benchProgress').textContent = '完成';
+  btns.forEach(b=>b.disabled=false);
+  toast('基准测试完成 — 结果已写入「模型性能」页');
+}
+
+$('benchSelected').onclick = () => runBench([...QUOTA_PICKS]);
+$('benchTop').onclick = () => runBench(
+  MODELS.filter(m=>m.remaining>0).sort((a,b)=>(b.recommended-a.recommended)||(b.remaining-a.remaining)).slice(0,3).map(m=>m.id)
+);
+
+// ==================== Gemini 节点可用性检测 ====================
+$('nodeAttempts').onchange = (e) => { $('attemptsLabel').textContent = e.target.value; };
+
+$('checkNodes').onclick = async () => {
+  const picked = [...NODES.picked];
+  if (!picked.length) { toast('先在节点列表里勾选要测的节点'); return; }
+  if (!confirm(`将依次切换到 ${picked.length} 个节点测试 Gemini 可用性。\n` +
+               `每个节点测 ${$('nodeAttempts').value} 次，结束后自动切回当前节点。\n\n继续？`)) return;
+  const btn = $('checkNodes'); btn.disabled = true;
+  $('nodeCheckStatus').textContent = '检测中…';
+  try {
+    const r = await fetch('/api/node/gemini_check', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({nodes:picked, attempts:+$('nodeAttempts').value})}).then(x=>x.json());
+    if (!r.ok) { toast('启动失败: '+r.error); return; }
+    while (true) {
+      const j = await fetch(`/api/node/gemini_check/${r.job_id}`).then(x=>x.json());
+      $('ncbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
+      $('nodeCheckStatus').textContent = `${j.done}/${j.total} · ${j.current||''}`;
+      if (j.status!=='running') {
+        renderNodeCheckResults(j);
+        if (j.restore_error) toast('切回原节点失败: '+j.restore_error, 10000);
+        break;
+      }
+      await new Promise(res=>setTimeout(res,800));
+    }
+    await loadNodeChecks();
+    renderNodes();
+  } finally { btn.disabled=false; $('ncbar').style.width='0%'; }
+};
+
+function renderNodeCheckResults(job){
+  const entries = Object.entries(job.results||{});
+  $('nodeCheckResults').innerHTML = entries.length ? `<table style="font-size:12px;margin-top:11px">
+    <thead><tr><th>节点</th><th>出口 IP</th><th>结果</th><th>通过</th><th>累计</th></tr></thead>
+    <tbody>${entries.map(([n,r])=>{
+      const v = r.verdict;
+      const label = v==='ok' ? '<span class="good">可用</span>'
+        : v==='blocked' ? '<span class="bad">被地区限制</span>'
+        : v==='flaky' ? '<span class="warn">不稳定</span>' : '<span class="muted">未知</span>';
+      return `<tr><td class="mono">${n.replace(/^[^\|]*\|/,'')}</td>
+        <td class="muted mono">${r.ip||'—'} ${r.country?'· '+r.country:''}</td>
+        <td>${label}</td>
+        <td class="mono">${r.ok_count}/${r.attempts}</td>
+        <td class="muted mono">${r.total_fails}/${r.total_attempts} 失败</td></tr>`;
+    }).join('')}</tbody></table>` : '';
+}
+
+async function loadNodeChecks(){
+  try {
+    const r = await fetch('/api/node/checks').then(x=>x.json());
+    NODES.checks = r.checks || {};
+  } catch(e) { NODES.checks = {}; }
+}
+
+// ==================== 节点测速 ====================
+let NODES = { selector:null, current:null, list:[], delays:{}, expanded:new Set(),
+              picked:new Set(), checks:{} };
+let QUOTA_PICKS = new Set();      // 勾选要测的 Antigravity 模型
+
+function latClass(d){ return d==null?'bad': d<150?'good': d<400?'warn':'bad'; }
+function latColor(d){ return d==null?'var(--muted)': d<150?'var(--good)': d<400?'var(--warn)':'var(--bad)'; }
+
+window.togglePick = (enc, on) => {
+  const name = decodeURIComponent(enc);
+  if (on) NODES.picked.add(name); else NODES.picked.delete(name);
+};
+
+async function loadNodes(){
+  const r = await fetch('/api/status').then(x=>x.json()).catch(()=>null);
+  if (!r || !r.ok) {
+    const api = r?.kernel_api || 'http://127.0.0.1:12440';
+    $('nodeStatus').innerHTML = '<span class="bad">代理内核不可达</span>';
+    $('regionGrid').innerHTML = `<div class="card" style="grid-column:1/-1">
+      <div class="card-t bad" style="margin-bottom:9px">连不上代理内核</div>
+      <div class="sub" style="line-height:1.8">
+        正在连 <span class="mono">${api}</span>${r?.error?' — '+r.error:''}<br>
+        <br>这个页面需要 <b>Clash 风格的本地控制 API</b>。常见客户端：
+        <br>· <b>SakuraCat</b> — 默认 <span class="mono">12440</span> / 代理 <span class="mono">12450</span>（即当前默认值）
+        <br>· <b>Clash Verge / mihomo</b> — 通常是 <span class="mono">9090</span> / 代理 <span class="mono">7890</span>
+        <br>· <b>ClashX / Clash for Windows</b> — 通常是 <span class="mono">9090</span> / <span class="mono">7890</span>
+        <br><br>换客户端时，在启动网关前设好环境变量即可：
+        <br><span class="mono">CLASH_API=http://127.0.0.1:9090</span>
+        <br><span class="mono">CLASH_PROXY=http://127.0.0.1:7890</span>
+        <br><br><b>不支持的</b>：V2Ray / Xray / Shadowsocks / WireGuard 这类没有
+        Clash 控制 API 的客户端 —— 它们只能在系统层面配代理，
+        没有"列出节点、切换节点、单节点测速"这些接口，所以本页无法驱动它们。
+      </div>
+    </div>`;
+    return;
+  }
+  NODES.selector = r.selector; NODES.current = r.current; NODES.list = r.nodes;
+  await loadNodeChecks();
+  $('nodeStatus').innerHTML = `<b>${r.kernel.version}</b> · 当前 <b>${r.current}</b> · 共 <b>${r.nodes.length}</b> 节点`;
+  renderNodes();
+}
+
+function regionStats(){
+  const map = {};
+  for (const n of NODES.list) {
+    const r = NODES.delays[n.name] || {};
+    const g = map[n.region] || (map[n.region] = {region:n.region, total:0, ok:0, fail:0, untested:0, latencies:[], nodes:[]});
+    g.total++; g.nodes.push(n);
+    if (r.error) g.fail++;
+    else if (r.delay!=null) { g.ok++; g.latencies.push(r.delay); }
+    else g.untested++;
+  }
+  for (const g of Object.values(map)) {
+    g.best = g.latencies.length ? Math.min(...g.latencies) : null;
+    g.avg = g.latencies.length ? Math.round(g.latencies.reduce((a,b)=>a+b,0)/g.latencies.length) : null;
+    g.nodes.sort((a,b)=>{
+      const da=(NODES.delays[a.name]||{}).delay, dbb=(NODES.delays[b.name]||{}).delay;
+      if(da==null&&dbb==null) return a.name.localeCompare(b.name);
+      if(da==null) return 1; if(dbb==null) return -1; return da-dbb;
+    });
+  }
+  return map;
+}
+
+function renderNodes(){
+  const map = regionStats();
+  let groups = Object.values(map);
+  const mode = $('sortModeSel').value;
+
+  if (mode === 'latency') groups.sort((a,b)=>{
+    if(a.best==null&&b.best==null) return a.region.localeCompare(b.region);
+    if(a.best==null) return 1; if(b.best==null) return -1; return a.best-b.best;
+  });
+  else if (mode === 'status') groups.sort((a,b)=> (b.ok-a.ok) || ((a.best??9999)-(b.best??9999)));
+  else groups.sort((a,b)=> a.region.localeCompare(b.region,'zh'));
+
+  // 顶部 KPI
+  const totalOk = groups.reduce((s,g)=>s+g.ok,0);
+  const allLat = groups.flatMap(g=>g.latencies);
+  const fastest = allLat.length ? Math.min(...allLat) : null;
+  const avgAll = allLat.length ? Math.round(allLat.reduce((a,b)=>a+b,0)/allLat.length) : null;
+  $('nodeKpis').innerHTML = `
+    ${kpiCard('可用节点', `${totalOk} / ${NODES.list.length}`, `已测 ${allLat.length + groups.reduce((s,g)=>s+g.fail,0)} 个`)}
+    ${kpiCard('最快延迟', fastest!=null?fastest+' ms':'—', '所有节点中的最小值')}
+    ${kpiCard('平均延迟', avgAll!=null?avgAll+' ms':'—', '可用节点的平均值')}
+    ${kpiCard('地区数', groups.length, '点卡片展开节点列表')}
+  `;
+
+  // 地区卡片网格
+  $('regionGrid').innerHTML = groups.map(g => {
+    const open = NODES.expanded.has(g.region);
+    const bestCls = latClass(g.best);
+    const ratio = g.total ? (g.ok/g.total*100) : 0;
+    return `<div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:14px 16px;cursor:pointer" onclick="toggleRegion('${g.region}')">
+        <div class="card-h" style="margin-bottom:9px">
+          <div class="card-t"><span class="muted" style="font-size:11px">${open?'▾':'▸'}</span>${g.region}</div>
+          <span class="pill">${g.total} 个</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:9px">
+          <span class="kpi ${bestCls}">${g.best!=null?g.best:'—'}</span>
+          <span class="kpi-label" style="margin:0">ms 最快</span>
+          ${g.avg!=null?`<span class="muted" style="font-size:11px;margin-left:auto">平均 ${g.avg}ms</span>`:''}
+        </div>
+        <div class="bar" style="margin-top:9px">
+          <i style="width:${ratio.toFixed(0)}%;background:${ratio>70?'var(--good)':ratio>30?'var(--warn)':'var(--bad)'}"></i>
+        </div>
+        <div class="kpi-label">${g.ok} 可用${g.fail?` · <span class="bad">${g.fail} 失败</span>`:''}${g.untested?` · ${g.untested} 未测`:''}</div>
+      </div>
+      <div id="rg-${encodeURIComponent(g.region)}" style="display:${open?'block':'none'};border-top:1px solid var(--border)">
+        ${g.nodes.map(n=>{
+          const r = NODES.delays[n.name]||{}; const d=r.delay;
+          const isCur = n.name===NODES.current;
+          const short = n.name.replace(/^[^\|]*\|/,'');
+          const chk = NODES.checks[n.name];
+          const checked = NODES.picked.has(n.name);
+          // 检测结论: blocked 明确标记, flaky 提示不稳, ok 打勾
+          const badge = !chk ? '' :
+            chk.verdict==='blocked' ? `<span class="pill bad-pill" title="Google 地区限制: ${(chk.error||'').slice(0,90)}">✗ Gemini</span>` :
+            chk.verdict==='flaky'   ? `<span class="pill warn-pill" title="${chk.fails}/${chk.attempts} 次失败">⚠ Gemini</span>` :
+            chk.verdict==='ok'      ? `<span class="pill good-pill" title="Gemini 可用 (${chk.attempts-chk.fails}/${chk.attempts} 通过)">✓ Gemini</span>` : '';
+          return `<div class="noderow">
+            <input type="checkbox" ${checked?'checked':''} onchange="togglePick('${encodeURIComponent(n.name)}', this.checked)">
+            <span class="nodename" title="${n.name}">
+              ${short}${isCur?' <span class="pill" style="border-color:var(--accent);color:var(--accent)">当前</span>':''}
+            </span>
+            ${badge}
+            <span class="mono lat" style="color:${latColor(d)}">${d!=null?d+'ms':'—'}</span>
+            <button style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();switchNode('${encodeURIComponent(n.name)}')" ${isCur?'disabled':''}>切换</button>
+            <button style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();checkIp('${encodeURIComponent(n.name)}')">IP</button>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.toggleRegion = (region) => {
+  if (NODES.expanded.has(region)) NODES.expanded.delete(region);
+  else NODES.expanded.add(region);
+  renderNodes();
+};
+
+window.switchNode = async (enc) => {
+  const node = decodeURIComponent(enc);
+  const r = await fetch('/api/switch', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({group:NODES.selector, node})}).then(x=>x.json());
+  if (r.ok) { NODES.current = r.now; toast('已切换到 '+node); renderNodes(); }
+  else toast('切换失败: '+r.error);
+};
+
+window.checkIp = async (enc) => {
+  const node = decodeURIComponent(enc);
+  toast('正在检测 '+node+' 的出口 IP…', 20000);
+  const r = await fetch('/api/ip_check', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({group:NODES.selector, node})}).then(x=>x.json());
+  if (r.ok) { const g=r.geo; toast(`出口 ${g.query}\n${g.country} ${g.city} · ${g.isp}\n${g.as}`, 15000); }
+  else toast('检测失败: '+r.error, 10000);
+};
+
+async function runNodeBatch(nodes){
+  if (!nodes.length) { toast('没有要测的节点'); return; }
+  $('testAll').disabled = $('testFailed').disabled = true;
+  const {job_id} = await fetch('/api/test', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({nodes:nodes.map(n=>n.name||n), timeout:$('timeoutSel').value})}).then(x=>x.json());
+  if (!job_id) { toast('启动失败'); $('testAll').disabled=$('testFailed').disabled=false; return; }
+  let last = 0;
+  while (true) {
+    const j = await fetch(`/api/test/${job_id}`).then(x=>x.json());
+    Object.assign(NODES.delays, j.results);
+    $('nbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
+    if (j.done-last>=5 || j.status!=='running') { last=j.done; renderNodes(); }
+    if (j.status!=='running') break;
+    await new Promise(r=>setTimeout(r,300));
+  }
+  renderNodes(); $('nbar').style.width='0%';
+  $('testAll').disabled = $('testFailed').disabled = false;
+  const ok = Object.values(NODES.delays).filter(r=>r.delay!=null).length;
+  toast(`测速完成 · ${ok} 个可用`);
+}
+
+$('testAll').onclick = () => runNodeBatch(NODES.list);
+$('testFailed').onclick = () => runNodeBatch(NODES.list.filter(n=>{
+  const r=NODES.delays[n.name]; return r && (r.error || r.delay==null);
+}));
+$('collapseAll').onclick = () => { NODES.expanded.clear(); renderNodes(); };
+$('sortModeSel').onchange = renderNodes;
+$('selectAllNodes').onclick = () => {
+  // 全选"未检测过"或"检测过但可用/不稳"的节点, 跳过已确认禁用的 (没必要重测)
+  NODES.list.forEach(n=>{
+    const c = NODES.checks[n.name];
+    if (!c || c.verdict!=='blocked') NODES.picked.add(n.name);
+  });
+  renderNodes();
+  toast(`已勾选 ${NODES.picked.size} 个节点 (已确认禁用的会跳过)`);
+};
+$('clearNodes').onclick = () => { NODES.picked.clear(); renderNodes(); };
+
+// ---------- 启动 ----------
+loadUsage();
+setInterval(() => { if ($('p-usage').classList.contains('active')) loadUsage(); }, 30000);
+</script>
+</body>
+</html>
