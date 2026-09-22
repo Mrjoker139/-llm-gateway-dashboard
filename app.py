@@ -27,15 +27,21 @@ import gateway
 import usage_db as db
 from providers import (build_providers, provider_status, set_provider_config,
                        set_provider_enabled, add_custom_provider,
-                       remove_custom_provider, env_or_file)
+                       remove_custom_provider, set_kernel_config, env_or_file,
+                       load_ui_config)
 
 # ---- 代理内核 (Clash 风格 API) ----
 # 默认对应 SakuraCat; 其他客户端只要提供兼容的 Clash 控制 API 就能用.
-# 配置来源: 环境变量 > .env > 默认值. 例如:
+# 配置来源: 环境变量 > config.json 的 _kernel 段 (仪表盘 UI 可改) > .env > 默认值.
+# 每次请求都重新读, 所以在仪表盘上改端口立即生效, 不需要重启.
 #   CLASH_API=http://127.0.0.1:9090      (Clash Verge / mihomo / ClashX 默认端口)
 #   CLASH_PROXY=http://127.0.0.1:7890
-KERNEL_API = env_or_file("CLASH_API", "http://127.0.0.1:12440")
-PROXY_URL = env_or_file("CLASH_PROXY", "http://127.0.0.1:12450")
+def kernel_api() -> str:
+    return env_or_file("CLASH_API", "http://127.0.0.1:12440")
+
+
+def proxy_url() -> str:
+    return env_or_file("CLASH_PROXY", "http://127.0.0.1:12450")
 
 TEST_URLS = {
     "Google (gstatic)": "http://www.gstatic.com/generate_204",
@@ -63,6 +69,23 @@ PROVIDERS = build_providers()
 db.init_db()
 
 
+def _start_auto_purge() -> None:
+    def _worker():
+        # 后台守护: 启动时和每 24h 自动淘汰过期数据 (失败记录保留 7 天, 正常记录保留 90 天)
+        while True:
+            try:
+                db.purge_older_than(days=90, error_days=7)
+            except Exception:
+                pass
+            time.sleep(86400)
+
+    t = threading.Thread(target=_worker, daemon=True, name="usage-auto-purge")
+    t.start()
+
+
+_start_auto_purge()
+
+
 def reload_providers() -> None:
     global PROVIDERS
     PROVIDERS = build_providers()
@@ -84,7 +107,7 @@ def region_of(name: str) -> str:
 
 def _kernel_get(path: str, **params) -> httpx.Response:
     with httpx.Client(timeout=15.0) as client:
-        return client.get(f"{KERNEL_API}{path}", params=params or None)
+        return client.get(f"{kernel_api()}{path}", params=params or None)
 
 
 def _delay_of(node: str, url: str, timeout_ms: int) -> dict:
@@ -107,19 +130,39 @@ def index():
     return app.send_static_file("index.html")
 
 
+@app.get("/api/kernel")
+def api_kernel_get():
+    """读取代理内核配置 (控制 API + 代理端口)."""
+    return jsonify({"ok": True, "kernel_api": kernel_api(), "proxy_url": proxy_url()})
+
+
+@app.post("/api/kernel")
+def api_kernel_set():
+    """保存代理内核配置. 立即生效, 不需要重启."""
+    body = request.get_json(force=True) or {}
+    if "kernel_api" not in body and "proxy_url" not in body:
+        return jsonify({"ok": False, "error": "kernel_api or proxy_url required"}), 400
+    for key in ("kernel_api", "proxy_url"):
+        val = (body.get(key) or "").strip()
+        if val and not val.startswith(("http://", "https://")):
+            return jsonify({"ok": False, "error": f"{key} 必须以 http:// 或 https:// 开头"}), 400
+    set_kernel_config(body.get("kernel_api"), body.get("proxy_url"))
+    return jsonify({"ok": True, "kernel_api": kernel_api(), "proxy_url": proxy_url()})
+
+
 @app.get("/api/status")
 def api_status():
     """内核版本 + 节点列表 + 当前选择."""
     try:
         with httpx.Client(timeout=10.0) as client:
-            version = client.get(f"{KERNEL_API}/version").json()
-            proxies = client.get(f"{KERNEL_API}/proxies").json()["proxies"]
+            version = client.get(f"{kernel_api()}/version").json()
+            proxies = client.get(f"{kernel_api()}/proxies").json()["proxies"]
     except Exception as exc:  # noqa: BLE001
         return jsonify({
             "ok": False,
             "error": f"代理内核 API 不可达: {exc}",
-            "kernel_api": KERNEL_API,
-            "proxy_url": PROXY_URL,
+            "kernel_api": kernel_api(),
+            "proxy_url": proxy_url(),
             "hint": ("需要 Clash 风格的本地控制 API。SakuraCat 默认 12440/12450；"
                      "Clash Verge / mihomo 通常是 9090/7890。用环境变量 "
                      "CLASH_API / CLASH_PROXY 指定。"),
@@ -128,7 +171,7 @@ def api_status():
     groups = {k: v for k, v in proxies.items() if v.get("type") == "Selector"}
     if not groups:
         return jsonify({"ok": False, "error": "未找到策略组 (Selector)",
-                        "kernel_api": KERNEL_API}), 502
+                        "kernel_api": kernel_api()}), 502
     selector_name, selector = max(groups.items(), key=lambda kv: len(kv[1].get("all", [])))
 
     nodes = [
@@ -143,12 +186,13 @@ def api_status():
         {
             "ok": True,
             "kernel": version,
-            "kernel_api": KERNEL_API,
-            "proxy_url": PROXY_URL,
+            "kernel_api": kernel_api(),
+            "proxy_url": proxy_url(),
             "selector": selector_name,
             "current": selector.get("now"),
             "nodes": nodes,
             "test_urls": list(TEST_URLS),
+            "gemini_unsupported_regions": gemini_unsupported_regions(),
         }
     )
 
@@ -172,7 +216,7 @@ def _run_job(job: dict, nodes: list[str], url: str, timeout_ms: int, concurrency
                 async with sem:
                     try:
                         resp = await client.get(
-                            f"{KERNEL_API}/proxies/{quote(node, safe='')}/delay",
+                            f"{kernel_api()}/proxies/{quote(node, safe='')}/delay",
                             params={"timeout": timeout_ms, "url": url},
                         )
                         if resp.status_code == 200:
@@ -239,7 +283,7 @@ def api_switch():
     try:
         with httpx.Client(timeout=15.0) as client:
             resp = client.put(
-                f"{KERNEL_API}/proxies/{quote(group, safe='')}",
+                f"{kernel_api()}/proxies/{quote(group, safe='')}",
                 json={"name": node},
             )
     except Exception as exc:  # noqa: BLE001
@@ -264,7 +308,7 @@ def api_ip_check():
 
     try:
         with httpx.Client(timeout=10.0) as client:
-            proxies = client.get(f"{KERNEL_API}/proxies").json()["proxies"]
+            proxies = client.get(f"{kernel_api()}/proxies").json()["proxies"]
         original = proxies.get(group, {}).get("now")
     except Exception as exc:  # noqa: BLE001
         return jsonify({"ok": False, "error": f"读取当前选择失败: {exc}"}), 502
@@ -273,11 +317,11 @@ def api_ip_check():
     error = None
     try:
         with httpx.Client(timeout=15.0) as client:
-            client.put(f"{KERNEL_API}/proxies/{quote(group, safe='')}", json={"name": node})
+            client.put(f"{kernel_api()}/proxies/{quote(group, safe='')}", json={"name": node})
         import time
 
         time.sleep(2.0)  # 等内核完成切换
-        with httpx.Client(timeout=20.0, proxy=PROXY_URL) as client:
+        with httpx.Client(timeout=20.0, proxy=proxy_url()) as client:
             geo = client.get(
                 "http://ip-api.com/json/?fields=status,country,city,isp,org,as,asname,query"
             ).json()
@@ -287,7 +331,7 @@ def api_ip_check():
         if original:
             try:
                 with httpx.Client(timeout=15.0) as client:
-                    client.put(f"{KERNEL_API}/proxies/{quote(group, safe='')}", json={"name": original})
+                    client.put(f"{kernel_api()}/proxies/{quote(group, safe='')}", json={"name": original})
             except Exception as exc:  # noqa: BLE001
                 error = (error or "") + f" | 恢复原节点失败: {exc}"
 
@@ -318,6 +362,18 @@ def api_models_quota():
 GEMINI_TEST_MODEL = "gemini-2.5-flash-lite"   # 最便宜, 用来试水
 GEMINI_TEST_ATTEMPTS = 3
 
+# Google 地区限制的"先验名单": 命中地区的节点默认不选入检测 (零请求, 纯按节点名判断).
+# 只是先验 — 用户仍可手动勾选强测; 实测结论 (node_checks 表) 永远优先于名单.
+# 可用 config.json 的 _gemini_check.unsupported_regions 覆盖.
+GEMINI_UNSUPPORTED_REGIONS = ["香港", "澳门"]
+
+
+def gemini_unsupported_regions() -> list[str]:
+    custom = (load_ui_config().get("_gemini_check") or {}).get("unsupported_regions")
+    if isinstance(custom, list):
+        return [r for r in custom if isinstance(r, str) and r]
+    return GEMINI_UNSUPPORTED_REGIONS
+
 NODE_JOBS: dict[str, dict] = {}
 # 节点检测会真实切换节点, 必须串行 —— 两个任务同时跑会互相切乱,
 # 而且后启动的那个可能把"中间态节点"误当成原节点, 最后恢复错.
@@ -330,20 +386,24 @@ def _node_check_running() -> bool:
 
 def _current_exit_ip(timeout: float = 20.0) -> dict:
     """通过代理查当前出口 IP 和归属地."""
-    with httpx.Client(timeout=timeout, proxy=PROXY_URL) as client:
+    with httpx.Client(timeout=timeout, proxy=proxy_url()) as client:
         r = client.get("http://ip-api.com/json/?fields=status,country,city,isp,query")
         return r.json()
 
 
 def _set_node(group: str, node: str) -> None:
     with httpx.Client(timeout=15.0) as client:
-        client.put(f"{KERNEL_API}/proxies/{quote(group, safe='')}", json={"name": node})
+        r = client.put(f"{kernel_api()}/proxies/{quote(group, safe='')}", json={"name": node})
+        # 节点名失效时内核会拒绝切换; 不检查的话会继续用"没切过去的旧出口"探测,
+        # 把结论记到错误节点名下 (B 之后结论长期有效, 记错不会被重测纠正)
+        r.raise_for_status()
 
 
-def _probe_gemini() -> tuple[bool, str | None]:
+def _probe_gemini(access_token: str | None = None) -> tuple[bool, str | None]:
     """发一个最小请求试 Gemini. 返回 (是否可用, 错误信息)."""
     try:
-        r = ag.benchmark_model(GEMINI_TEST_MODEL, prompt="hi", max_tokens=8, timeout=45)
+        r = ag.benchmark_model(GEMINI_TEST_MODEL, prompt="hi", max_tokens=8,
+                               timeout=45, access_token=access_token)
     except Exception as exc:  # noqa: BLE001
         return False, f"{type(exc).__name__}: {exc}"[:200]
     err = r.get("error")
@@ -353,6 +413,12 @@ def _probe_gemini() -> tuple[bool, str | None]:
 def _run_node_check(job: dict, group: str, nodes: list[str],
                     attempts: int, original: str | None) -> None:
     """逐个节点切换 -> 测 N 次 -> 记库. 结束后切回原节点."""
+    # 整个任务共用一个 access token. 默认每次 probe 都拿 refresh_token 换票,
+    # N 个节点 × 3 次就是 3N 次刷新 — 同一账号短时间从大量 IP 刷新是典型风控信号.
+    try:
+        access_token = ag.get_access_token()
+    except Exception:  # noqa: BLE001
+        access_token = None      # 刷新失败则退回每次 probe 自行换票
     try:
         for node in nodes:
             job["current"] = node
@@ -376,7 +442,7 @@ def _run_node_check(job: dict, group: str, nodes: list[str],
             outcomes: list[tuple[bool, str | None]] = []
             if reachable:
                 for _ in range(attempts):
-                    outcomes.append(_probe_gemini())
+                    outcomes.append(_probe_gemini(access_token))
                     if not outcomes[-1][0]:
                         time.sleep(1.0)      # 失败后稍等一下再试
             else:
@@ -418,39 +484,50 @@ def api_node_gemini_check():
     串行执行: 同时只允许一个检测任务, 否则两个任务会互相切乱节点.
     """
     body = request.get_json(force=True) or {}
-    nodes = body.get("nodes") or []
+    nodes = list(dict.fromkeys(body.get("nodes") or []))
     if not nodes:
         return jsonify({"ok": False, "error": "nodes required"}), 400
+
+    # 测一次就长期有效: 已有结论的节点默认不重测 (检测会真实动用 Google 账号,
+    # 频繁全量重测容易触发风控). 前端勾选"重测已测过的"时 force=True 才带上.
+    force = bool(body.get("force"))
+    skipped_tested: list[str] = []
+    if not force:
+        tested = db.node_checks()
+        skipped_tested = [n for n in nodes if n in tested]
+        nodes = [n for n in nodes if n not in tested]
+    if not nodes:
+        return jsonify({"ok": False,
+                        "error": f"勾选的 {len(skipped_tested)} 个节点都已检测过, 无需重测 "
+                                 f"(要重测请勾选「重测已测过的」)"}), 400
+
+    # 读内核状态不需要持锁 (锁只保护"切节点"的串行性)
+    attempts = max(1, min(5, int(body.get("attempts", GEMINI_TEST_ATTEMPTS))))
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            proxies = client.get(f"{kernel_api()}/proxies").json()["proxies"]
+        groups = {k: v for k, v in proxies.items() if v.get("type") == "Selector"}
+        if not groups:
+            return jsonify({"ok": False, "error": "未找到策略组"}), 502
+        group, selector = max(groups.items(), key=lambda kv: len(kv[1].get("all", [])))
+        original = selector.get("now")
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"读取内核状态失败: {exc}"}), 502
+
     if not _node_check_lock.acquire(blocking=False):
         return jsonify({"ok": False,
                         "error": "已有检测任务在跑, 请等它结束 (检测会切换节点, 不能并行)"}), 409
-    try:
-        attempts = max(1, min(5, int(body.get("attempts", GEMINI_TEST_ATTEMPTS))))
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                proxies = client.get(f"{KERNEL_API}/proxies").json()["proxies"]
-            groups = {k: v for k, v in proxies.items() if v.get("type") == "Selector"}
-            if not groups:
-                return jsonify({"ok": False, "error": "未找到策略组"}), 502
-            group, selector = max(groups.items(), key=lambda kv: len(kv[1].get("all", [])))
-            original = selector.get("now")
-        except Exception as exc:  # noqa: BLE001
-            return jsonify({"ok": False, "error": f"读取内核状态失败: {exc}"}), 502
-
-        job = {
-            "id": uuid.uuid4().hex[:12], "status": "running",
-            "total": len(nodes), "done": 0, "current": None,
-            "results": {}, "original": original,
-        }
-        NODE_JOBS[job["id"]] = job
-        # 锁由线程在结束时释放 (见 _run_node_check 的 finally)
-        threading.Thread(target=_run_node_check,
-                         args=(job, group, nodes, attempts, original), daemon=True).start()
-        return jsonify({"ok": True, "job_id": job["id"], "original": original,
-                        "attempts": attempts})
-    except Exception:
-        _node_check_lock.release()
-        raise
+    job = {
+        "id": uuid.uuid4().hex[:12], "status": "running",
+        "total": len(nodes), "done": 0, "current": None,
+        "results": {}, "original": original,
+    }
+    NODE_JOBS[job["id"]] = job
+    # 锁由线程在结束时释放 (见 _run_node_check 的 finally)
+    threading.Thread(target=_run_node_check,
+                     args=(job, group, nodes, attempts, original), daemon=True).start()
+    return jsonify({"ok": True, "job_id": job["id"], "original": original,
+                    "attempts": attempts, "skipped_tested": skipped_tested})
 
 
 @app.get("/api/node/gemini_check/<job_id>")
@@ -661,6 +738,56 @@ def api_usage_timeline():
     hours = float(request.args.get("hours", 24))
     buckets = int(request.args.get("buckets", 24))
     return jsonify({"ok": True, "timeline": db.timeline(hours, buckets)})
+
+
+@app.post("/api/usage/delete_record")
+def api_usage_delete_record():
+    """删除单条请求或基准测试记录."""
+    body = request.get_json(force=True) or {}
+    record_type = body.get("type", "request")
+    record_id = body.get("id")
+    if record_id is None:
+        return jsonify({"ok": False, "error": "id required"}), 400
+    try:
+        record_id = int(record_id)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid id"}), 400
+    deleted = db.delete_record(record_type, record_id)
+    return jsonify({"ok": True, "deleted": deleted})
+
+
+@app.post("/api/usage/clear_errors")
+def api_usage_clear_errors():
+    """清除失败记录 (单模型或全局)."""
+    body = request.get_json(force=True) or {}
+    provider = body.get("provider") or None
+    model = body.get("model") or None
+    res = db.clear_errors(provider, model)
+    return jsonify({"ok": True, **res})
+
+
+@app.post("/api/usage/clear_model")
+def api_usage_clear_model():
+    """清空指定模型的全部历史数据."""
+    body = request.get_json(force=True) or {}
+    provider = body.get("provider", "")
+    model = body.get("model", "")
+    if not provider or not model:
+        return jsonify({"ok": False, "error": "provider and model required"}), 400
+    res = db.clear_model_history(provider, model)
+    return jsonify({"ok": True, **res})
+
+
+@app.post("/api/usage/purge")
+def api_usage_purge():
+    """清理过期数据 (支持指定正常数据保留天数与失败保留天数)."""
+    body = request.get_json(force=True) or {}
+    days = int(body.get("days", 90))
+    error_days = body.get("error_days")
+    if error_days is not None:
+        error_days = int(error_days)
+    res = db.purge_older_than(days=days, error_days=error_days)
+    return jsonify({"ok": True, **res})
 
 
 @app.get("/api/providers")

@@ -56,7 +56,10 @@
   select,button,input{background:var(--card2);color:var(--text);border:1px solid var(--border);
                       border-radius:6px;padding:6px 11px;font-size:13px;cursor:pointer}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-  button:disabled{opacity:.45;cursor:not-allowed}
+  button.danger{border-color:var(--bad);color:var(--bad);background:rgba(255,107,107,.1)}
+  button.danger:hover{background:rgba(255,107,107,.2)}
+  button.sm{padding:2px 8px;font-size:11px;border-radius:4px}
+  button:disabled{opacity:.35;cursor:not-allowed;pointer-events:none;filter:grayscale(0.7)}
   .pill{padding:1px 7px;border-radius:9px;font-size:11px;border:1px solid var(--border);color:var(--muted)}
   .toast{position:fixed;right:20px;bottom:20px;background:var(--card);
          border:1px solid var(--border);border-left:3px solid var(--accent);
@@ -74,22 +77,22 @@
   .prog{height:4px;background:var(--card2);border-radius:2px;overflow:hidden;margin:10px 0}
   .prog > i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 
-  /* 模型性能表 — 分组表头 + 每组一个色系 (参考同事的设计稿) */
-  .ptable th, .ptable td{padding:7px 9px;white-space:nowrap}
+  /* 模型性能表 — 分组表头 + 统一对齐与分组边框 */
+  .ptable th, .ptable td{padding:7px 8px;white-space:nowrap;vertical-align:middle}
   .ptable thead tr:first-child th{font-size:11px;text-align:center;letter-spacing:.3px;
     color:var(--text);border-bottom:1px solid var(--border)}
   .ptable thead tr:last-child th{font-size:11px;color:var(--muted);text-align:right;
     padding-top:3px;padding-bottom:7px}
   .ptable thead tr:last-child th.grp{font-weight:600}
   .ptable td.num{text-align:right;font-family:Consolas,monospace;font-size:12px;
-    font-variant-numeric:tabular-nums}
+    font-variant-numeric:tabular-nums;min-width:44px}
   .ptable tbody tr.main:hover{background:rgba(255,255,255,.03)}
-  /* 每个指标组一条底部分隔线, 视觉上把列分组 */
+  /* 每个指标组的分组背景色与边框对齐线 (表头到数据行贯通) */
   .ptable .g-ttft{background:rgba(224,163,62,.09)}
   .ptable .g-dur{background:rgba(76,141,255,.09)}
   .ptable .g-tps{background:rgba(154,108,255,.09)}
-  .ptable td.g-ttft{border-left:1px solid var(--border)}
-  .ptable td.g-tps{border-right:1px solid var(--border)}
+  .ptable .grp-start{border-left:1px solid var(--border) !important}
+  .ptable .grp-end{border-right:1px solid var(--border) !important}
   .cellbar{height:3px;border-radius:2px;margin-top:3px;opacity:.75}
   .mrow{cursor:pointer}
   .expander{display:inline-block;width:11px;color:var(--muted);font-size:10px}
@@ -144,16 +147,33 @@
   .avail-model:hover .avail-copy{opacity:1}
 
   /* 厂商启用/关闭开关 (厂商配置页) */
-  .switch{position:relative;display:inline-block;width:34px;height:19px;flex-shrink:0}
-  .switch input{opacity:0;width:0;height:0}
-  .switch .slider{position:absolute;inset:0;background:#3a4150;border-radius:19px;
-                  cursor:pointer;transition:.15s}
-  .switch .slider:before{content:"";position:absolute;width:13px;height:13px;left:3px;top:3px;
-                         background:#8a93a6;border-radius:50%;transition:.15s}
-  .switch input:checked + .slider{background:var(--good)}
-  .switch input:checked + .slider:before{transform:translateX(15px);background:#fff}
-  .card.disabled-card{opacity:.55}
+  .switch{position:relative;display:inline-block;width:38px;height:20px;flex-shrink:0;vertical-align:middle}
+  .switch input{position:absolute;opacity:0;width:0;height:0;margin:0;padding:0;border:none;pointer-events:none}
+  .switch .slider{position:absolute;inset:0;background:#2b323d;border:1px solid #3d4656;border-radius:20px;
+                 cursor:pointer;transition:all .2s ease}
+  .switch .slider:before{content:"";position:absolute;width:14px;height:14px;left:2px;top:2px;
+                         background:#8a93a6;border-radius:50%;transition:all .2s ease}
+  .switch input:checked + .slider{background:var(--good);border-color:var(--good)}
+  .switch input:checked + .slider:before{transform:translateX(18px);background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.5)}
+  .switch:hover .slider{border-color:#5a667a}
+  .switch input:checked + .slider:hover{background:#2eb16f}
+  .card.disabled-card{opacity:.55;background:#12151b}
   .card.disabled-card .dot.off{background:var(--border)}
+  .switch-text{font-size:11px;font-weight:600;min-width:34px;user-select:none}
+
+  /* 配额筛选与代际标签 */
+  .chip-group{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .chip{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;
+        font-size:11px;cursor:pointer;color:var(--muted);user-select:none;transition:all .15s ease}
+  .chip:hover{color:var(--text);border-color:var(--accent)}
+  .chip.active{background:rgba(76,141,255,.15);border-color:var(--accent);color:var(--accent);font-weight:600}
+  .gen-badge{display:inline-block;padding:0 5px;border-radius:4px;font-size:10px;font-weight:600;
+             background:rgba(255,255,255,.06);border:1px solid var(--border);margin-right:4px}
+  .gen-badge.claude{background:rgba(217,119,87,.15);border-color:rgba(217,119,87,.4);color:#e88d72}
+  .gen-badge.gpt{background:rgba(16,163,127,.15);border-color:rgba(16,163,127,.4);color:#2dd4bf}
+  .gen-badge.g38{background:rgba(154,108,255,.18);border-color:rgba(154,108,255,.4);color:#bb9af7}
+  .gen-badge.g37{background:rgba(76,141,255,.15);border-color:rgba(76,141,255,.4);color:#7aa2f7}
+  .gen-badge.g3{background:rgba(56,189,248,.12);border-color:rgba(56,189,248,.3);color:#38bdf8}
 </style>
 </head>
 <body>
@@ -237,35 +257,59 @@
         <option value="8760">全部</option>
       </select>
       <button class="primary" id="refreshModels">刷新</button>
+      <div style="position:relative;display:inline-block">
+        <button id="purgeMenuBtn" onclick="togglePurgeMenu(event)">数据管理 ▾</button>
+        <div id="purgeMenu" style="display:none;position:absolute;left:0;top:100%;background:#181b22;border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.5);z-index:99;min-width:180px;padding:4px 0;margin-top:4px">
+          <div onclick="handlePurgeAction('clear_all_errors')" style="padding:8px 14px;color:var(--bad);cursor:pointer;font-size:12px;display:flex;align-items:center;gap:6px" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
+            <span>🧹</span> 清理全部失败记录
+          </div>
+          <div style="border-top:1px solid var(--border);margin:4px 0"></div>
+          <div onclick="handlePurgeAction('purge_30')" style="padding:8px 14px;cursor:pointer;font-size:12px" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
+            淘汰 30 天前旧数据
+          </div>
+          <div onclick="handlePurgeAction('purge_90')" style="padding:8px 14px;cursor:pointer;font-size:12px" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
+            淘汰 90 天前旧数据
+          </div>
+        </div>
+      </div>
       <span class="sub">按「厂商 + 模型」聚合 · 点任意一行展开逐条明细</span>
-    </div><div class="sub" style="margin-bottom:11px">
-      <b>TTFT</b> 首字延迟（响应起手速度，越小越好） ·
-      <b>耗时</b> 单次请求总时长 ·
-      <b>TPS</b> 生成吞吐量（每秒输出 token，越大越快） ·
-      <b>成本</b> 按内置单价表估算（表里没有的模型不显示，可用 <span class="mono">pricing.json</span> 覆盖）
+    </div><div class="sub" style="margin-bottom:11px;line-height:1.6">
+      <b>TTFT</b> 首字延迟 · <b>耗时</b> 请求总时长 · <b>TPS</b> 生成速度 (Token/秒) ·
+      <b>P10</b> 最佳表现 (最快10%) · <b>P50</b> 中位数 (日常水平) · <b>P90</b> 慢速长尾 · <b>avg</b> 平均值
     </div>
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="ptable">
         <thead>
           <tr>
-            <th rowspan="2" style="width:22px"></th>
-            <th rowspan="2">模型</th>
-            <th rowspan="2">来源</th>
+            <th rowspan="2" style="width:22px;text-align:center"></th>
+            <th rowspan="2" style="text-align:left">模型</th>
+            <th rowspan="2" style="text-align:left">来源</th>
             <th rowspan="2" style="text-align:right">请求</th>
             <th rowspan="2" style="text-align:right">Token</th>
             <th rowspan="2" style="text-align:right">成本</th>
-            <th colspan="5" class="g-ttft">TTFT (s)</th>
-            <th colspan="5" class="g-dur">耗时 (s)</th>
-            <th colspan="5" class="g-tps">TPS</th>
+            <th colspan="4" class="g-ttft grp-start">TTFT (s)</th>
+            <th colspan="4" class="g-dur grp-start">耗时 (s)</th>
+            <th colspan="4" class="g-tps grp-start grp-end">TPS</th>
           </tr>
           <tr>
-            <th class="grp g-ttft">avg</th><th class="g-ttft">P50</th><th class="g-ttft">P90</th><th class="g-ttft">P95</th><th class="g-ttft">P99</th>
-            <th class="grp g-dur">avg</th><th class="g-dur">P50</th><th class="g-dur">P90</th><th class="g-dur">P95</th><th class="g-dur">P99</th>
-            <th class="grp g-tps">avg</th><th class="g-tps">P50</th><th class="g-tps">P90</th><th class="g-tps">P95</th><th class="g-tps">P99</th>
+            <th class="g-ttft grp-start" title="10% 分位数: 最快 10% 请求达到的起手延迟 (最佳速度)">P10</th>
+            <th class="g-ttft" title="50% 分位数 / 中位数: 正好排在中间那一半请求的延迟，代表日常典型体验">P50</th>
+            <th class="g-ttft" title="90% 分位数: 90% 的请求快于此时间，代表慢速长尾上限">P90</th>
+            <th class="grp g-ttft" title="平均首字延迟 (所有请求耗时总和 ÷ 总次数)">avg</th>
+
+            <th class="g-dur grp-start" title="10% 分位数: 最快 10% 请求的总耗时">P10</th>
+            <th class="g-dur" title="50% 分位数: 典型请求总耗时 (中位数)">P50</th>
+            <th class="g-dur" title="90% 分位数: 90% 请求总耗时低于此值">P90</th>
+            <th class="grp g-dur" title="平均总耗时">avg</th>
+
+            <th class="g-tps grp-start" title="10% 分位数: 较慢 10% 请求时的吐字速度">P10</th>
+            <th class="g-tps" title="50% 分位数: 典型吐字速度 (中位数)">P50</th>
+            <th class="g-tps" title="90% 分位数: 高速吐字速度">P90</th>
+            <th class="grp g-tps grp-end" title="平均吐字速度 (Token/秒)">avg</th>
           </tr>
         </thead>
         <tbody id="modelStatRows">
-          <tr><td colspan="20" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>
+          <tr><td colspan="18" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>
         </tbody>
       </table>
     </div>
@@ -312,21 +356,70 @@
   </div>
 
   <div class="sec">
+    <h2 class="sec-title">代理内核</h2>
+    <div class="card" style="max-width:640px">
+      <div class="sub" style="margin-bottom:11px">
+        SakuraCat 默认控制 API <span class="mono">12440</span> / 代理 <span class="mono">12450</span>；
+        Clash Verge / mihomo 通常是 <span class="mono">9090</span> / <span class="mono">7890</span>。
+        换客户端或端口变了就在这里改，保存立即生效。
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">
+        <label class="sub">控制 API 地址<br>
+          <input id="kernelApi" style="width:100%;cursor:text" placeholder="http://127.0.0.1:12440">
+        </label>
+        <label class="sub">代理地址（Gemini 等境外厂商用）<br>
+          <input id="kernelProxy" style="width:100%;cursor:text" placeholder="http://127.0.0.1:12450">
+        </label>
+      </div>
+      <div style="display:flex;gap:9px;margin-top:11px;align-items:center">
+        <button class="primary" id="saveKernel">保存</button>
+        <span class="sub" id="kernelStatus"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
     <div class="card" style="margin-bottom:14px">
       <div class="card-h" style="margin-bottom:9px">
         <div class="card-t">Antigravity 订阅配额</div>
-        <span class="pill" id="quotaSummary">未加载</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="pill" id="quotaSummary">未加载</span>
+          <button class="primary sm" id="loadQuota">刷新配额</button>
+        </div>
       </div>
       <div class="sub" style="margin-bottom:11px">
-        复用 Antigravity 的 OAuth 凭据（Google Pro 会员）。它走 Google 内部 API，
-        <b>不经过网关</b>，所以实测结果以
+        复用 Antigravity 的 OAuth 凭据（Google Pro 会员）。走 Google 内部 API，
+        <b>不经过网关</b>，已自动将<b>最新一代（Claude 4.6 / Gemini 3.8 / 3.7 / GPT）置顶排序</b>；测试结果以
         <span class="pill" style="border-color:var(--purple);color:var(--purple)">基准</span>
-        标记出现在「模型性能」页 —— 没有 token 量和成本，但延迟和速度是真测的。
+        标记记录到「模型性能」页。
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <div class="chip-group" id="quotaFamilyChips">
+          <span class="chip active" data-family="all">全部模型</span>
+          <span class="chip" data-family="claude">Claude (4.6)</span>
+          <span class="chip" data-family="gemini38">Gemini 3.8</span>
+          <span class="chip" data-family="gemini37">Gemini 3.7</span>
+          <span class="chip" data-family="gemini3">Gemini 3.x</span>
+          <span class="chip" data-family="gemini25">Gemini 2.5</span>
+          <span class="chip" data-family="gpt">GPT / 其他</span>
+        </div>
+        <div style="flex:1;min-width:160px;max-width:260px">
+          <input type="text" id="quotaSearch" placeholder="搜索模型 (如 3.8, claude)..." style="width:100%;padding:4px 8px;font-size:12px">
+        </div>
       </div>
       <div class="toolbar" style="margin-bottom:0">
-        <button class="primary" id="loadQuota">刷新配额</button>
-        <label class="sub"><input type="checkbox" id="onlyAvail" checked> 只看有配额的</label>
-        <label class="sub"><input type="checkbox" id="onlyRec"> 只看推荐的</label>
+        <label class="sub"><input type="checkbox" id="onlyAvail" checked> 只看有配额</label>
+        <label class="sub"><input type="checkbox" id="onlyRec"> 只看推荐</label>
+        <span class="sub">|</span>
+        <label class="sub">排序:
+          <select id="quotaSortSel" style="padding:2px 6px;font-size:11px">
+            <option value="smart" selected>默认最新代际 (3.8 > 3.7 > 2.5)</option>
+            <option value="remaining_desc">剩余配额从高到低</option>
+            <option value="remaining_asc">剩余配额从低到高</option>
+            <option value="speed_desc">速度 TPS 从快到慢</option>
+            <option value="name_asc">按名称 A-Z</option>
+          </select>
+        </label>
         <span class="sub">|</span>
         <button id="benchSelected">测试勾选的模型</button>
         <button id="benchTop">测试前 3 个推荐</button>
@@ -335,14 +428,14 @@
       <div class="prog"><i id="mbar"></i></div>
     </div>
 
-    <div class="card" style="padding:0;max-height:460px;overflow-y:auto">
+    <div class="card" style="padding:0;max-height:600px;overflow-y:auto">
       <table class="qtable"><thead><tr>
         <th style="width:30px"><input type="checkbox" id="qCheckAll" title="全选/全不选"></th>
-        <th>模型</th>
-        <th style="width:34%">剩余配额</th>
-        <th>重置时间</th>
+        <th style="text-align:left">模型</th>
+        <th style="width:28%">5h 滚动剩余配额</th>
+        <th>重置倒计时 / 时间</th>
         <th style="text-align:right">TTFT</th>
-        <th style="text-align:right">速度</th>
+        <th style="text-align:right">速度 (TPS)</th>
       </tr></thead><tbody id="quotaRows">
         <tr><td colspan="6" class="empty">点「刷新配额」加载</td></tr>
       </tbody></table>
@@ -357,11 +450,15 @@
         <span class="mono">User location is not supported</span> 拒掉 —— 同一国家不同 IP 段也可能一个通一个不通。
         <br>在下面<b>勾选要用的节点</b>（不勾就不测，避免无谓的节点切换），每个节点会测
         <b id="attemptsLabel">3</b> 次（单次失败可能只是网络抖动）。<b>测完自动切回你原来的节点。</b>
+        <br><b>每个节点只测一次、结论长期有效</b>——检测会真实动用你的 Google 账号，频繁全量重测容易触发风控；
+        「全选未测」每个地区至多抽 2 个没测过的节点（多轮自然轮换覆盖），香港/澳门等受限地区默认跳过（仍可手动勾选强测）。
       </div>
       <div class="toolbar">
         <button class="primary" id="checkNodes">检测勾选的节点</button>
-        <button id="selectAllNodes">全选</button>
+        <button id="selectAllNodes">全选未测</button>
         <button id="clearNodes">清空</button>
+        <label class="sub" title="默认只测从没测过的节点；勾选后已测过的也会重测（会重复动用账号，慎用）">
+          <input type="checkbox" id="retestChecked"> 重测已测过的</label>
         <label class="sub">每节点测
           <select id="nodeAttempts" style="padding:2px 6px">
             <option value="1">1 次</option>
@@ -573,6 +670,7 @@ $('winSel').onchange = loadUsage;
 
 // ==================== 模型性能 ====================
 let MODEL_STATS = [];
+let OPEN_MODELS = new Set();
 
 // 每个指标组的色系, 和表头底色对应
 const GROUP_COLORS = { ttft:'var(--warn)', duration:'var(--accent)', tps:'var(--purple)' };
@@ -581,33 +679,39 @@ const GROUP_COLORS = { ttft:'var(--warn)', duration:'var(--accent)', tps:'var(--
 function sec(ms){ return ms==null ? '—' : (ms/1000).toFixed(1); }
 function tps1(v){ return v==null ? '—' : v.toFixed(1); }
 
-// 一组分位数渲染成 5 个单元格. 列尾带一条按比例的长度条, 横向一眼比出快慢.
+// 一组分位数渲染成 4 个单元格 (P10, P50, P90, avg). 列尾带一条按比例的长度条.
 function pctCells(group, key, maxVal, fmtFn){
   const m = group || {};
   const color = GROUP_COLORS[key];
-  const vals = ['avg','p50','p90','p95','p99'];
+  const vals = ['p10','p50','p90','avg'];
   const bar = (v) => {
     const w = (maxVal>0 && v!=null) ? Math.max(2, Math.min(100, v/maxVal*100)) : 0;
     return w ? `<div class="cellbar" style="width:${w.toFixed(0)}%;background:${color}"></div>` : '';
   };
   return vals.map((k,i) => {
     const v = m[k];
-    const cls = k==='avg' ? 'num grp ' : 'num ';
+    let cls = 'num ';
+    if (k === 'p10') cls += 'grp-start ';
+    if (k === 'avg') cls += 'grp ';
+    if (key === 'tps' && k === 'avg') cls += 'grp-end ';
     return `<td class="${cls}${'g-'+key}">${fmtFn(v)}${bar(v)}</td>`;
   }).join('');
 }
 
 async function loadModelStats(){
   const h = $('mWinSel').value;
-  const r = await fetch(`/api/usage/model_stats?hours=${h}`).then(x=>x.json());
+  const r = await fetch(`/api/usage/model_stats?hours=${h}`).then(x=>x.json()).catch(()=>({}));
   MODEL_STATS = r.stats || [];
   if (!MODEL_STATS.length) {
-    $('modelStatRows').innerHTML = '<tr><td colspan="20" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>';
+    $('modelStatRows').innerHTML = '<tr><td colspan="18" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>';
     return;
   }
   // 每组的最大值, 用来归一化色条长度
-  const maxOf = (key, field) => Math.max(...MODEL_STATS.map(s=>(s[key]||{})[field]||0), 1);
-  const maxTtft = maxOf('ttft','p99'), maxDur = maxOf('duration','p99'), maxTps = maxOf('tps','p99');
+  const maxOf = (key) => Math.max(...MODEL_STATS.map(s => {
+    const g = s[key] || {};
+    return Math.max(g.p10||0, g.p50||0, g.p90||0, g.avg||0);
+  }), 1);
+  const maxTtft = maxOf('ttft'), maxDur = maxOf('duration'), maxTps = maxOf('tps');
 
   $('modelStatRows').innerHTML = MODEL_STATS.map((s,i) => {
     const tps = s.tps || {};
@@ -622,11 +726,11 @@ async function loadModelStats(){
         : '<span class="pill">网关</span>';
     return `
     <tr class="main mrow" onclick="toggleModelDetail(${i})">
-      <td><span class="expander" id="arrow-${i}">▸</span></td>
-      <td><div class="mono" style="font-weight:600">${s.model}</div>
+      <td style="text-align:center"><span class="expander" id="arrow-${i}">▸</span></td>
+      <td style="text-align:left"><div class="mono" style="font-weight:600">${s.model}</div>
           <div class="kpi-label"><span class="pill">${s.provider}</span>
             ${s.errors?` <span class="bad">${s.errors} 失败</span>`:''}</div></td>
-      <td>${src}</td>
+      <td style="text-align:left">${src}</td>
       <td class="num">${s.requests?fmt(s.requests):'—'}</td>
       <td class="num">${s.total_tokens?fmt(s.total_tokens):'—'}</td>
       <td class="num">${cost}</td>
@@ -634,69 +738,214 @@ async function loadModelStats(){
       ${pctCells(s.duration, 'duration', maxDur, sec)}
       ${pctCells(tps, 'tps', maxTps, tps1)}
     </tr>
-    <tr id="detail-${i}" style="display:none"><td colspan="20" style="padding:0;background:#12151b">
+    <tr id="detail-${i}" style="display:none"><td colspan="18" style="padding:0;background:#12151b">
       <div id="detailBody-${i}" style="padding:12px 16px" class="muted">加载中…</div>
     </td></tr>`;
   }).join('');
+
+  // 恢复先前已展开的模型
+  MODEL_STATS.forEach((s, i) => {
+    const key = s.provider + ':::' + s.model;
+    if (OPEN_MODELS.has(key)) {
+      const row = $('detail-' + i);
+      const arrow = $('arrow-' + i);
+      if (row) row.style.display = 'table-row';
+      if (arrow) arrow.textContent = '▾';
+      reloadDetailBody(i);
+    }
+  });
 }
 
 window.toggleModelDetail = async (i) => {
-  const row = $('detail-'+i);
-  const arrow = $('arrow-'+i);
-  const open = row.style.display !== 'none';
-  if (open) { row.style.display='none'; arrow.textContent='▸'; return; }
-  row.style.display='table-row'; arrow.textContent='▾';
   const s = MODEL_STATS[i];
-  const body = $('detailBody-'+i);
-  body.textContent = '加载中…';
+  if (!s) return;
+  const key = s.provider + ':::' + s.model;
+  const row = $('detail-' + i);
+  const arrow = $('arrow-' + i);
+  const open = row && row.style.display !== 'none';
+  if (open) {
+    row.style.display = 'none';
+    arrow.textContent = '▸';
+    OPEN_MODELS.delete(key);
+    return;
+  }
+  if (row) row.style.display = 'table-row';
+  if (arrow) arrow.textContent = '▾';
+  OPEN_MODELS.add(key);
+  await reloadDetailBody(i);
+};
+
+async function reloadDetailBody(i) {
+  const s = MODEL_STATS[i];
+  if (!s) return;
+  const body = $('detailBody-' + i);
+  if (!body) return;
   const q = `provider=${encodeURIComponent(s.provider)}&model=${encodeURIComponent(s.model)}&limit=100`;
 
   // 基准数据 (Antigravity 那些走不了网关的模型) 没有网关明细, 看基准记录
   if (s.source === 'bench') {
-    const r = await fetch(`/api/usage/benchmark_detail?${q}`).then(x=>x.json());
+    const r = await fetch(`/api/usage/benchmark_detail?${q}`).then(x=>x.json()).catch(()=>({}));
     const bs = r.benchmarks || [];
     if (!bs.length) { body.textContent = '无明细'; return; }
     body.innerHTML = `
-      <div class="sub" style="margin-bottom:8px">
-        ${s.provider} / ${s.model} · 共 ${s.bench_requests} 次基准测试
-        · 数据来自 Antigravity 直连测试（不经过网关，所以没有 token 量和成本）
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;flex-wrap:wrap;gap:8px">
+        <div class="sub">
+          ${s.provider} / ${s.model} · 共 ${s.bench_requests} 次基准测试
+          · 数据来自 Antigravity 直连测试（不经过网关，所以没有 token 量和成本）
+        </div>
+        <div style="display:flex;gap:6px">
+          ${s.errors ? `<button class="sm danger" onclick="event.stopPropagation(); clearModelErrors('${s.provider}', '${s.model}', ${i})">清除失败记录 (${s.errors})</button>` : ''}
+          <button class="sm" onclick="event.stopPropagation(); clearEntireModel('${s.provider}', '${s.model}')">清空该模型所有记录</button>
+        </div>
       </div>
       <table style="font-size:12px"><thead><tr>
-        <th>时间</th><th>TTFT</th><th>TPS</th><th>总耗时</th><th>输出 token</th><th>状态</th>
+        <th style="text-align:left">时间</th>
+        <th style="text-align:right">TTFT</th>
+        <th style="text-align:right">TPS</th>
+        <th style="text-align:right">总耗时</th>
+        <th style="text-align:right">输出 token</th>
+        <th style="text-align:center">状态</th>
+        <th style="width:50px;text-align:center">操作</th>
       </tr></thead><tbody>${bs.map(b=>`<tr>
         <td class="muted">${new Date(b.ts).toLocaleString('zh-CN')}</td>
-        <td>${b.ttft_ms!=null?sec(b.ttft_ms)+' s':'—'}</td>
-        <td>${b.tokens_per_sec!=null?tps1(b.tokens_per_sec):'—'}</td>
-        <td>${b.total_ms!=null?sec(b.total_ms)+' s':'—'}</td>
-        <td>${b.tokens??'—'}</td>
-        <td class="${b.error?'bad':'good'}">${b.error?(b.error.slice(0,60)):'成功'}</td>
+        <td class="num">${b.ttft_ms!=null?sec(b.ttft_ms)+' s':'—'}</td>
+        <td class="num">${b.tokens_per_sec!=null?tps1(b.tokens_per_sec):'—'}</td>
+        <td class="num">${b.total_ms!=null?sec(b.total_ms)+' s':'—'}</td>
+        <td class="num">${b.tokens??'—'}</td>
+        <td style="text-align:center" class="${b.error?'bad':'good'}" title="${b.error||''}">${b.error?(b.error.slice(0,60)):'成功'}</td>
+        <td style="text-align:center"><button class="sm danger" onclick="event.stopPropagation(); deleteRecord('benchmark', ${b.id}, ${i})" title="删除此条记录">删除</button></td>
       </tr>`).join('')}</tbody></table>`;
     return;
   }
 
-  const r = await fetch(`/api/usage/model_detail?${q}`).then(x=>x.json());
+  const r = await fetch(`/api/usage/model_detail?${q}`).then(x=>x.json()).catch(()=>({}));
   const reqs = r.requests || [];
   if (!reqs.length) { body.textContent = '无明细'; return; }
   body.innerHTML = `
-    <div class="sub" style="margin-bottom:8px">
-      ${s.provider} / ${s.model} · 共 ${s.requests} 次请求 · 平均输入 ${fmt(s.avg_input)} / 输出 ${fmt(s.avg_output)} token
-      · 输出输入比 ${s.io_ratio??'—'} · 客户端 ${s.clients||'—'}
-      ${s.cost!=null?` · 成本估算 ¥${s.cost.toFixed(2)}`:''}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;flex-wrap:wrap;gap:8px">
+      <div class="sub">
+        ${s.provider} / ${s.model} · 共 ${s.requests} 次请求 · 平均输入 ${fmt(s.avg_input)} / 输出 ${fmt(s.avg_output)} token
+        · 输出输入比 ${s.io_ratio??'—'} · 客户端 ${s.clients||'—'}
+        ${s.cost!=null?` · 成本估算 ¥${s.cost.toFixed(2)}`:''}
+      </div>
+      <div style="display:flex;gap:6px">
+        ${s.errors ? `<button class="sm danger" onclick="event.stopPropagation(); clearModelErrors('${s.provider}', '${s.model}', ${i})">清除失败记录 (${s.errors})</button>` : ''}
+        <button class="sm" onclick="event.stopPropagation(); clearEntireModel('${s.provider}', '${s.model}')">清空该模型所有记录</button>
+      </div>
     </div>
     <table style="font-size:12px"><thead><tr>
-      <th>时间</th><th>客户端</th><th>输入</th><th>输出</th>
-      <th>TTFT</th><th>TPS</th><th>总耗时</th><th>流式</th><th>状态</th>
+      <th style="text-align:left">时间</th>
+      <th style="text-align:left">客户端</th>
+      <th style="text-align:right">输入</th>
+      <th style="text-align:right">输出</th>
+      <th style="text-align:right">TTFT</th>
+      <th style="text-align:right">TPS</th>
+      <th style="text-align:right">总耗时</th>
+      <th style="text-align:center">流式</th>
+      <th style="text-align:center">状态</th>
+      <th style="width:50px;text-align:center">操作</th>
     </tr></thead><tbody>${reqs.map(q=>`<tr>
       <td class="muted">${new Date(q.ts).toLocaleString('zh-CN')}</td>
       <td><span class="pill">${q.client||'—'}</span></td>
-      <td>${fmt(q.input_tokens)}</td><td>${fmt(q.output_tokens)}</td>
-      <td>${q.ttft_ms!=null?sec(q.ttft_ms)+' s':'—'}</td>
-      <td>${q.speed_tps!=null?tps1(q.speed_tps):'—'}</td>
-      <td>${q.duration_ms!=null?sec(q.duration_ms)+' s':'—'}</td>
-      <td class="muted">${q.stream?'✓':'—'}</td>
-      <td class="${q.status>=400?'bad':'good'}">${q.status}</td>
+      <td class="num">${fmt(q.input_tokens)}</td>
+      <td class="num">${fmt(q.output_tokens)}</td>
+      <td class="num">${q.ttft_ms!=null?sec(q.ttft_ms)+' s':'—'}</td>
+      <td class="num">${q.speed_tps!=null?tps1(q.speed_tps):'—'}</td>
+      <td class="num">${q.duration_ms!=null?sec(q.duration_ms)+' s':'—'}</td>
+      <td style="text-align:center" class="muted">${q.stream?'✓':'—'}</td>
+      <td style="text-align:center" class="${q.status>=400?'bad':'good'}" title="${q.error||''}">${q.status}${q.error?' (异常)':''}</td>
+      <td style="text-align:center"><button class="sm danger" onclick="event.stopPropagation(); deleteRecord('request', ${q.id}, ${i})" title="删除此条记录">删除</button></td>
     </tr>`).join('')}</tbody></table>`;
+}
+
+window.togglePurgeMenu = (e) => {
+  e.stopPropagation();
+  const m = $('purgeMenu');
+  if (m) m.style.display = m.style.display === 'none' ? 'block' : 'none';
 };
+
+document.addEventListener('click', (e) => {
+  const m = $('purgeMenu');
+  if (m && m.style.display !== 'none' && !e.target.closest('#purgeMenuBtn') && !e.target.closest('#purgeMenu')) {
+    m.style.display = 'none';
+  }
+});
+
+window.handlePurgeAction = async (action) => {
+  const m = $('purgeMenu');
+  if (m) m.style.display = 'none';
+  if (action === 'clear_all_errors') {
+    if (!confirm('确定清除全库所有模型的失败记录吗？')) return;
+    const r = await fetch('/api/usage/clear_errors', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).then(x => x.json()).catch(() => ({}));
+    if (r.ok) {
+      toast(`已清理 ${r.total} 条失败记录（网关 ${r.requests}，基准 ${r.benchmarks}）`);
+      loadModelStats();
+    } else {
+      toast('清理失败: ' + (r.error || '未知错误'));
+    }
+  } else if (action === 'purge_30' || action === 'purge_90') {
+    const days = action === 'purge_30' ? 30 : 90;
+    if (!confirm(`确定淘汰清理 ${days} 天前的历史记录吗？（失败记录保留 7 天）`)) return;
+    const r = await fetch('/api/usage/purge', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({days: days, error_days: 7})
+    }).then(x => x.json()).catch(() => ({}));
+    if (r.ok) {
+      toast(`淘汰完成：共清理 ${r.total} 条过期记录`);
+      loadModelStats();
+    } else {
+      toast('清理失败: ' + (r.error || '未知错误'));
+    }
+  }
+};
+
+window.deleteRecord = async (type, id, modelIndex) => {
+  if (!confirm('确定删除该条记录吗？')) return;
+  const r = await fetch('/api/usage/delete_record', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({type, id})
+  }).then(x => x.json()).catch(() => ({}));
+  if (r.ok && r.deleted) {
+    toast('已删除记录');
+    await loadModelStats();
+  } else {
+    toast('删除失败: ' + (r.error || '未知错误'));
+  }
+};
+
+window.clearModelErrors = async (provider, model, modelIndex) => {
+  if (!confirm(`确定清除模型 ${provider} / ${model} 的所有失败记录吗？`)) return;
+  const r = await fetch('/api/usage/clear_errors', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({provider, model})
+  }).then(x => x.json()).catch(() => ({}));
+  if (r.ok) {
+    toast(`已清除 ${r.total} 条失败记录`);
+    await loadModelStats();
+  } else {
+    toast('清除失败: ' + (r.error || '未知错误'));
+  }
+};
+
+window.clearEntireModel = async (provider, model) => {
+  if (!confirm(`警告：确定清空模型 ${provider} / ${model} 的全部历史数据吗？\n该操作不可撤销！`)) return;
+  const r = await fetch('/api/usage/clear_model', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({provider, model})
+  }).then(x => x.json()).catch(() => ({}));
+  if (r.ok) {
+    toast(`已清空模型历史数据（共 ${r.total} 条）`);
+    OPEN_MODELS.delete(provider + ':::' + model);
+    loadModelStats();
+  } else {
+    toast('清空失败: ' + (r.error || '未知错误'));
+  }
+};
+
 $('refreshModels').onclick = loadModelStats;
 $('mWinSel').onchange = loadModelStats;
 
@@ -770,9 +1019,12 @@ async function loadProviders(){
       <div style="display:flex;align-items:center;gap:8px">
         <span class="pill">${p.custom?'自定义':p.kind}</span>
         <label class="switch" title="${p.enabled?'点击关闭':'点击开启'}">
-          <input type="checkbox" ${p.enabled?'checked':''} onchange="toggleProvider('${p.id}', this.checked)">
+          <input type="checkbox" id="toggle-${p.id}" ${p.enabled?'checked':''} onchange="toggleProvider('${p.id}', this.checked)">
           <span class="slider"></span>
         </label>
+        <span class="switch-text ${p.enabled?'good':'muted'}" id="st-${p.id}">
+          ${p.enabled ? '已开启' : '已关闭'}
+        </span>
       </div>
     </div>
     <div class="kpi sm ${p.enabled&&p.configured?'good':'muted'}" id="bal-${p.id}">
@@ -800,11 +1052,31 @@ async function loadProviders(){
 }
 
 window.toggleProvider = async (pid, on) => {
+  // 乐观即时更新 UI：无需等待网络往返，立即切换按钮与卡片状态
+  const card = $(`bal-${pid}`)?.closest('.card');
+  if (card) {
+    card.classList.toggle('disabled-card', !on);
+    const dot = card.querySelector('.dot');
+    if (dot) {
+      dot.className = 'dot ' + (!on ? 'off' : 'on');
+    }
+    const stText = $(`st-${pid}`);
+    if (stText) {
+      stText.textContent = on ? '已开启' : '已关闭';
+      stText.className = 'switch-text ' + (on ? 'good' : 'muted');
+    }
+    const bal = $(`bal-${pid}`);
+    if (bal) {
+      bal.textContent = !on ? '已关闭' : (PROVIDERS.find(x=>x.id===pid)?.api_key_masked || '已配置');
+      bal.className = 'kpi sm ' + (!on ? 'muted' : 'good');
+    }
+    card.querySelectorAll('input:not([type=checkbox]), button').forEach(el => el.disabled = !on);
+  }
   const r = await fetch(`/api/providers/${pid}/toggle`, {method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({enabled:on})}).then(x=>x.json());
+    body:JSON.stringify({enabled:on})}).then(x=>x.json()).catch(err=>({ok:false, error:String(err)}));
   if (r.ok) { toast(`${on?'已开启':'已关闭'} ${PROVIDERS.find(x=>x.id===pid)?.name||pid}`); loadProviders(); }
-  else toast('操作失败: '+r.error, 8000);
+  else { toast('操作失败: '+(r.error||'未知错误'), 8000); loadProviders(); }
 };
 
 window.saveProvider = async (pid) => {
@@ -841,6 +1113,31 @@ window.removeCustom = async (pid) => {
 };
 
 $('refreshProviders').onclick = loadProviders;
+
+async function loadKernelConfig(){
+  const r = await fetch('/api/kernel').then(x=>x.json()).catch(()=>null);
+  if (!r || !r.ok) return;
+  $('kernelApi').value = r.kernel_api || '';
+  $('kernelProxy').value = r.proxy_url || '';
+}
+$('saveKernel').onclick = async () => {
+  const body = {};
+  const api = $('kernelApi').value.trim(), proxy = $('kernelProxy').value.trim();
+  if (api) body.kernel_api = api;
+  if (proxy) body.proxy_url = proxy;
+  const r = await fetch('/api/kernel', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)}).then(x=>x.json());
+  const st = $('kernelStatus');
+  if (r.ok) {
+    st.textContent = `✓ 已保存：${r.kernel_api} / ${r.proxy_url}`;
+    st.className = 'sub good';
+    loadNodes();
+  } else {
+    st.textContent = '✗ ' + (r.error||'保存失败');
+    st.className = 'sub bad';
+  }
+};
+loadKernelConfig();
 $('addCustomBtn').onclick = () => {
   const sec = $('customFormSec');
   sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
@@ -910,6 +1207,8 @@ window.renderPlanWindows = (pid, windows) => {
   }).join('');
 };
 
+let QUOTA_FAMILY = 'all';
+
 async function loadQuota(){
   $('loadQuota').disabled = true; $('loadQuota').textContent='加载中…';
   try {
@@ -919,15 +1218,71 @@ async function loadQuota(){
       renderQuota();
       const avail = MODELS.filter(m=>m.remaining>0).length;
       $('quotaSummary').textContent = `${MODELS.length} 个模型 · ${avail} 个有额度`;
-      toast(`已加载 ${MODELS.length} 个模型`);
+      toast(`已加载 ${MODELS.length} 个模型（最新代际优先）`);
     } else toast('加载失败: '+r.error, 10000);
   } finally { $('loadQuota').disabled=false; $('loadQuota').textContent='刷新配额'; }
 }
 
+function getModelGenBadge(mid, prov){
+  const m = mid.toLowerCase();
+  if (m.includes('claude') || prov.toLowerCase().includes('anthropic')) {
+    return '<span class="gen-badge claude">Claude 4.6</span>';
+  }
+  if (m.includes('gpt') || prov.toLowerCase().includes('openai')) {
+    return '<span class="gen-badge gpt">GPT</span>';
+  }
+  if (m.includes('3.8')) return '<span class="gen-badge g38">Gemini 3.8</span>';
+  if (m.includes('3.7')) return '<span class="gen-badge g37">Gemini 3.7</span>';
+  if (m.includes('3.6') || m.includes('3.5') || m.includes('3.1') || m.includes('gemini-3')) {
+    return '<span class="gen-badge g3">Gemini 3.x</span>';
+  }
+  if (m.includes('2.5')) return '<span class="gen-badge">Gemini 2.5</span>';
+  return '';
+}
+
 function quotaFiltered(){
-  const onlyAvail = $('onlyAvail').checked, onlyRec = $('onlyRec').checked;
-  return MODELS.filter(m => (!onlyAvail || (m.remaining!=null && m.remaining>0))
-                         && (!onlyRec || m.recommended));
+  const onlyAvail = $('onlyAvail').checked;
+  const onlyRec = $('onlyRec').checked;
+  const kw = ($('quotaSearch').value || '').trim().toLowerCase();
+  const sortMode = $('quotaSortSel').value;
+
+  let list = MODELS.filter(m => {
+    if (onlyAvail && (m.remaining == null || m.remaining <= 0)) return false;
+    if (onlyRec && !m.recommended) return false;
+
+    // 分类 Chip 过滤
+    if (QUOTA_FAMILY !== 'all') {
+      const mid = m.id.toLowerCase();
+      const prov = (m.provider || '').toLowerCase();
+      if (QUOTA_FAMILY === 'claude' && !(mid.includes('claude') || prov.includes('anthropic'))) return false;
+      if (QUOTA_FAMILY === 'gemini38' && !mid.includes('3.8')) return false;
+      if (QUOTA_FAMILY === 'gemini37' && !mid.includes('3.7')) return false;
+      if (QUOTA_FAMILY === 'gemini3' && !(mid.includes('3.1') || mid.includes('3.5') || mid.includes('3.6') || mid.includes('gemini-3'))) return false;
+      if (QUOTA_FAMILY === 'gemini25' && !mid.includes('2.5')) return false;
+      if (QUOTA_FAMILY === 'gpt' && !(mid.includes('gpt') || prov.includes('openai') || mid.startsWith('chat_') || mid.startsWith('tab_'))) return false;
+    }
+
+    // 关键词过滤
+    if (kw) {
+      const text = `${m.id} ${m.display_name || ''} ${m.provider || ''}`.toLowerCase();
+      if (!text.includes(kw)) return false;
+    }
+    return true;
+  });
+
+  // 排序
+  if (sortMode === 'remaining_desc') {
+    list.sort((a,b) => (b.remaining || 0) - (a.remaining || 0));
+  } else if (sortMode === 'remaining_asc') {
+    list.sort((a,b) => (a.remaining || 0) - (b.remaining || 0));
+  } else if (sortMode === 'speed_desc') {
+    list.sort((a,b) => ((BENCH[b.id]?.tokens_per_sec || 0) - (BENCH[a.id]?.tokens_per_sec || 0)));
+  } else if (sortMode === 'name_asc') {
+    list.sort((a,b) => a.id.localeCompare(b.id));
+  }
+  // smart 保持后端返回的高版本在前的自然顺序
+
+  return list;
 }
 
 // 厂商给的是内部枚举名 (MODEL_PROVIDER_GOOGLE), 转成人话
@@ -943,15 +1298,39 @@ function renderQuota(){
     const b = BENCH[m.id] || {};
     const picked = QUOTA_PICKS.has(m.id);
     const pct = m.remaining;
+    const badge = getModelGenBadge(m.id, m.provider);
     return `<tr class="${picked?'picked':''}">
       <td><input type="checkbox" ${picked?'checked':''} onchange="toggleQuotaPick('${m.id}', this.checked)" style="cursor:pointer"></td>
-      <td><div class="mono" style="font-weight:600">${m.id}</div>
-          <div class="kpi-label">${prettyProvider(m.provider)}${m.recommended?' <span class="pill">推荐</span>':''}${m.thinking?' <span class="pill">思考</span>':''}</div></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${badge}
+          <div class="mono" style="font-weight:600">${m.id}</div>
+        </div>
+        <div class="kpi-label" style="margin-top:2px">
+          ${m.display_name ? `<span style="color:var(--text);margin-right:6px">${m.display_name}</span>` : ''}
+          ${prettyProvider(m.provider)}
+          ${m.recommended?' <span class="pill">推荐</span>':''}
+          ${m.thinking?' <span class="pill">思考</span>':''}
+        </div>
+      </td>
       <td><div style="display:flex;align-items:center;gap:8px">
         <div class="bar" style="flex:1;margin:0"><i style="width:${pct??0}%;background:${pctColor(pct)}"></i></div>
         <span class="mono" style="color:${pctColor(pct)};min-width:46px;text-align:right">${pct!=null?pct+'%':'—'}</span>
       </div></td>
-      <td class="muted" style="font-size:11px">${m.reset_time?new Date(m.reset_time).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}</td>
+      <td class="muted" style="font-size:11px">
+        ${(() => {
+          if (!m.reset_time) return '—';
+          const rDate = new Date(m.reset_time);
+          const diffMs = rDate - Date.now();
+          const fmtDate = rDate.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+          if (diffMs <= 0) return `<span class="good" title="${fmtDate}">即将重置</span>`;
+          const mins = Math.ceil(diffMs / 60000);
+          const hrs = Math.floor(mins / 60);
+          const remMins = mins % 60;
+          const cd = hrs > 0 ? `${hrs}h ${remMins}m 后` : `${remMins}m 后`;
+          return `<span title="将在 ${fmtDate} 重置">${cd} <span style="opacity:0.6;font-size:10px">(${fmtDate})</span></span>`;
+        })()}
+      </td>
       <td class="num">${b.ttft_ms!=null?(b.ttft_ms/1000).toFixed(1)+' s':'—'}</td>
       <td class="num">${b.tokens_per_sec!=null?b.tokens_per_sec.toFixed(1):'—'}</td>
     </tr>`;
@@ -995,6 +1374,19 @@ window.toggleQuotaPick = (id, on) => {
 $('loadQuota').onclick = loadQuota;
 $('onlyAvail').onchange = renderQuota;
 $('onlyRec').onchange = renderQuota;
+$('quotaSortSel').onchange = renderQuota;
+$('quotaSearch').oninput = renderQuota;
+
+// Chip 筛选点击事件
+document.querySelectorAll('#quotaFamilyChips .chip').forEach(chip => {
+  chip.onclick = () => {
+    document.querySelectorAll('#quotaFamilyChips .chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    QUOTA_FAMILY = chip.getAttribute('data-family');
+    renderQuota();
+  };
+});
+
 $('qCheckAll').onchange = (e) => {
   const list = quotaFiltered();
   if (e.target.checked) list.forEach(m=>QUOTA_PICKS.add(m.id));
@@ -1037,15 +1429,20 @@ $('nodeAttempts').onchange = (e) => { $('attemptsLabel').textContent = e.target.
 $('checkNodes').onclick = async () => {
   const picked = [...NODES.picked];
   if (!picked.length) { toast('先在节点列表里勾选要测的节点'); return; }
+  const retest = $('retestChecked').checked;
   if (!confirm(`将依次切换到 ${picked.length} 个节点测试 Gemini 可用性。\n` +
-               `每个节点测 ${$('nodeAttempts').value} 次，结束后自动切回当前节点。\n\n继续？`)) return;
+               `每个节点测 ${$('nodeAttempts').value} 次，结束后自动切回当前节点。\n` +
+               (retest ? `\n注意：勾选了「重测已测过的」，会重复动用账号探测已有结论的节点。\n` : '') +
+               `\n继续？`)) return;
   const btn = $('checkNodes'); btn.disabled = true;
   $('nodeCheckStatus').textContent = '检测中…';
   try {
     const r = await fetch('/api/node/gemini_check', {method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({nodes:picked, attempts:+$('nodeAttempts').value})}).then(x=>x.json());
+      body:JSON.stringify({nodes:picked, attempts:+$('nodeAttempts').value,
+                           force:retest})}).then(x=>x.json());
     if (!r.ok) { toast('启动失败: '+r.error); return; }
+    if ((r.skipped_tested||[]).length) toast(`已跳过 ${r.skipped_tested.length} 个检测过的节点`, 6000);
     while (true) {
       const j = await fetch(`/api/node/gemini_check/${r.job_id}`).then(x=>x.json());
       $('ncbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
@@ -1088,7 +1485,7 @@ async function loadNodeChecks(){
 
 // ==================== 节点测速 ====================
 let NODES = { selector:null, current:null, list:[], delays:{}, expanded:new Set(),
-              picked:new Set(), checks:{} };
+              picked:new Set(), checks:{}, unsupported:new Set() };
 let QUOTA_PICKS = new Set();      // 勾选要测的 Antigravity 模型
 
 function latClass(d){ return d==null?'bad': d<150?'good': d<400?'warn':'bad'; }
@@ -1112,7 +1509,9 @@ async function loadNodes(){
         <br>· <b>SakuraCat</b> — 默认 <span class="mono">12440</span> / 代理 <span class="mono">12450</span>（即当前默认值）
         <br>· <b>Clash Verge / mihomo</b> — 通常是 <span class="mono">9090</span> / 代理 <span class="mono">7890</span>
         <br>· <b>ClashX / Clash for Windows</b> — 通常是 <span class="mono">9090</span> / <span class="mono">7890</span>
-        <br><br>换客户端时，在启动网关前设好环境变量即可：
+        <br><br>换客户端时，两种改法：
+        <br>· 在「<b>厂商配置 → 代理内核</b>」里直接填，保存立即生效
+        <br>· 或启动网关前设环境变量：
         <br><span class="mono">CLASH_API=http://127.0.0.1:9090</span>
         <br><span class="mono">CLASH_PROXY=http://127.0.0.1:7890</span>
         <br><br><b>不支持的</b>：V2Ray / Xray / Shadowsocks / WireGuard 这类没有
@@ -1123,6 +1522,7 @@ async function loadNodes(){
     return;
   }
   NODES.selector = r.selector; NODES.current = r.current; NODES.list = r.nodes;
+  NODES.unsupported = new Set(r.gemini_unsupported_regions || []);
   await loadNodeChecks();
   $('nodeStatus').innerHTML = `<b>${r.kernel.version}</b> · 当前 <b>${r.current}</b> · 共 <b>${r.nodes.length}</b> 节点`;
   renderNodes();
@@ -1202,8 +1602,10 @@ function renderNodes(){
           const short = n.name.replace(/^[^\|]*\|/,'');
           const chk = NODES.checks[n.name];
           const checked = NODES.picked.has(n.name);
-          // 检测结论: blocked 明确标记, flaky 提示不稳, ok 打勾
-          const badge = !chk ? '' :
+          // 检测结论: blocked 明确标记, flaky 提示不稳, ok 打勾;
+          // 没测过但地区在限制名单内的标"地区存疑" (先验, 不是实测结论)
+          const badge = !chk ? (NODES.unsupported.has(n.region)
+              ? `<span class="pill" title="该地区在 Google 地区限制先验名单内, 默认不选入检测 (仍可手动勾选实测)">地区存疑</span>` : '') :
             chk.verdict==='blocked' ? `<span class="pill bad-pill" title="Google 地区限制: ${(chk.error||'').slice(0,90)}">✗ Gemini</span>` :
             chk.verdict==='flaky'   ? `<span class="pill warn-pill" title="${chk.fails}/${chk.attempts} 次失败">⚠ Gemini</span>` :
             chk.verdict==='ok'      ? `<span class="pill good-pill" title="Gemini 可用 (${chk.attempts-chk.fails}/${chk.attempts} 通过)">✓ Gemini</span>` : '';
@@ -1274,13 +1676,26 @@ $('testFailed').onclick = () => runNodeBatch(NODES.list.filter(n=>{
 $('collapseAll').onclick = () => { NODES.expanded.clear(); renderNodes(); };
 $('sortModeSel').onchange = renderNodes;
 $('selectAllNodes').onclick = () => {
-  // 全选"未检测过"或"检测过但可用/不稳"的节点, 跳过已确认禁用的 (没必要重测)
+  // 每轮每个地区最多抽 2 个候选: 地区风控按国家判, 一个地区抽几个就能定基调,
+  // 没必要一轮把 100+ 节点全过一遍 (检测会真实动用 Google 账号).
+  // 轮次之间自然轮换 (测过的下轮不再入选), 逐步覆盖; 勾了"重测已测过的"才带上老节点.
+  // 地区限制名单内的节点始终不主动选 (先验, 用户仍可手动勾选强测).
+  const retest = $('retestChecked').checked;
+  let skippedRegion = 0;
+  const perRegion = {};
   NODES.list.forEach(n=>{
-    const c = NODES.checks[n.name];
-    if (!c || c.verdict!=='blocked') NODES.picked.add(n.name);
+    if (!retest && NODES.checks[n.name]) return;
+    if (NODES.unsupported.has(n.region)) { skippedRegion++; return; }
+    (perRegion[n.region] = perRegion[n.region] || []).push(n.name);
+  });
+  Object.values(perRegion).forEach(names=>{
+    names.slice(0, 2).forEach(n=>NODES.picked.add(n));
   });
   renderNodes();
-  toast(`已勾选 ${NODES.picked.size} 个节点 (已确认禁用的会跳过)`);
+  const parts = [`已勾选 ${NODES.picked.size} 个节点 (每地区至多 2 个)`];
+  if (skippedRegion) parts.push(`${skippedRegion} 个受限地区已跳过`);
+  if (!retest) parts.push('已测过的不重测');
+  toast(parts.join(' · '));
 };
 $('clearNodes').onclick = () => { NODES.picked.clear(); renderNodes(); };
 

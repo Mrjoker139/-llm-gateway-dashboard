@@ -306,15 +306,16 @@ def _percentile(sorted_vals: list[float], q: float) -> float | None:
 
 
 def _metric_percentiles(rows: list[dict]) -> dict:
-    """算一组请求各指标的分位数: {ttft:{avg,p50,p90,p95,p99}, duration:{...}, tps:{...}}."""
+    """算一组请求各指标的分位数: {ttft:{p10,p50,p90,avg}, duration:{...}, tps:{...}}."""
     out: dict[str, dict] = {}
     for name in _METRIC_COLUMNS:
         vals = sorted(r[name] for r in rows if r.get(name) is not None)
         if not vals:
-            out[name] = {"avg": None, "p50": None, "p90": None, "p95": None, "p99": None}
+            out[name] = {"avg": None, "p10": None, "p50": None, "p90": None, "p95": None, "p99": None}
             continue
         out[name] = {
             "avg": round(sum(vals) / len(vals), 1),
+            "p10": round(_percentile(vals, 0.10), 1),
             "p50": round(_percentile(vals, 0.50), 1),
             "p90": round(_percentile(vals, 0.90), 1),
             "p95": round(_percentile(vals, 0.95), 1),
@@ -438,7 +439,7 @@ def _merge_benchmarks(rows: list[dict], hours: float) -> None:
 def model_detail(provider: str, model: str, limit: int = 200) -> list[dict]:
     """单个模型的逐条请求明细 (供展开查看)."""
     rows = _rows(
-        f"""SELECT ts, session_id, client, input_tokens, output_tokens,
+        f"""SELECT id, ts, session_id, client, input_tokens, output_tokens,
                    ttft_ms, duration_ms, stream, status, error,
                    {_TPS_EXPR} AS speed_tps
             FROM requests
@@ -545,7 +546,7 @@ def benchmark_stats(hours: float = 168) -> list[dict]:
 def benchmark_detail(provider: str, model: str, limit: int = 100) -> list[dict]:
     """单个模型的基准测试逐条明细."""
     return _rows(
-        """SELECT ts, ttft_ms, total_ms, tokens, tokens_per_sec, error
+        """SELECT id, ts, ttft_ms, total_ms, tokens, tokens_per_sec, error
            FROM benchmarks WHERE provider = ? AND model = ?
            ORDER BY ts DESC LIMIT ?""",
         (provider, model, limit),
@@ -741,9 +742,83 @@ def model_congestion(hours: float = 168) -> list[dict]:
     return out
 
 
-def purge_older_than(days: int = 90) -> int:
+def delete_record(record_type: str, record_id: int) -> bool:
+    """按 ID 删除单条 request 或 benchmark 记录."""
+    table = "requests" if record_type == "request" else "benchmarks" if record_type == "benchmark" else None
+    if not table:
+        return False
     with _write_lock:
         conn = _conn()
-        cur = conn.execute("DELETE FROM requests WHERE ts < ?", (_since(days),))
+        cur = conn.execute(f"DELETE FROM {table} WHERE id = ?", (record_id,))
         conn.commit()
-        return cur.rowcount
+        return cur.rowcount > 0
+
+
+def clear_errors(provider: str | None = None, model: str | None = None) -> dict[str, int]:
+    """清除失败记录. 若指定 provider/model 则仅清指定模型, 否则清空全库所有失败记录."""
+    with _write_lock:
+        conn = _conn()
+        if provider and model:
+            c1 = conn.execute(
+                "DELETE FROM requests WHERE provider = ? AND model = ? AND (status >= 400 OR error IS NOT NULL)",
+                (provider, model),
+            ).rowcount
+            c2 = conn.execute(
+                "DELETE FROM benchmarks WHERE provider = ? AND model = ? AND error IS NOT NULL",
+                (provider, model),
+            ).rowcount
+        else:
+            c1 = conn.execute("DELETE FROM requests WHERE status >= 400 OR error IS NOT NULL").rowcount
+            c2 = conn.execute("DELETE FROM benchmarks WHERE error IS NOT NULL").rowcount
+        conn.commit()
+        return {"requests": c1, "benchmarks": c2, "total": c1 + c2}
+
+
+def clear_model_history(provider: str, model: str) -> dict[str, int]:
+    """彻底清空指定模型在网关流量和基准测试中的全部历史数据."""
+    with _write_lock:
+        conn = _conn()
+        c1 = conn.execute("DELETE FROM requests WHERE provider = ? AND model = ?", (provider, model)).rowcount
+        c2 = conn.execute("DELETE FROM benchmarks WHERE provider = ? AND model = ?", (provider, model)).rowcount
+        conn.execute(
+            "DELETE FROM sessions WHERE id NOT IN (SELECT DISTINCT session_id FROM requests WHERE session_id IS NOT NULL)"
+        )
+        conn.commit()
+        return {"requests": c1, "benchmarks": c2, "total": c1 + c2}
+
+
+def purge_older_than(days: int = 90, error_days: int | None = 7) -> dict[str, int]:
+    """清理过期数据. 正常数据保留 days 天, 失败记录可设置更短的保留天数 error_days."""
+    with _write_lock:
+        conn = _conn()
+        req_purged = 0
+        bench_purged = 0
+
+        # 先清理较短保留期内的失败记录 (避免历史错误长期污染看板)
+        if error_days is not None and error_days < days:
+            err_since = _since(error_days)
+            c1 = conn.execute(
+                "DELETE FROM requests WHERE (status >= 400 OR error IS NOT NULL) AND ts < ?",
+                (err_since,),
+            ).rowcount
+            c2 = conn.execute(
+                "DELETE FROM benchmarks WHERE error IS NOT NULL AND ts < ?",
+                (err_since,),
+            ).rowcount
+            req_purged += c1
+            bench_purged += c2
+
+        # 淘汰超过总保留天数的所有记录
+        total_since = _since(days)
+        c3 = conn.execute("DELETE FROM requests WHERE ts < ?", (total_since,)).rowcount
+        c4 = conn.execute("DELETE FROM benchmarks WHERE ts < ?", (total_since,)).rowcount
+        req_purged += c3
+        bench_purged += c4
+
+        # 清理孤立 session
+        conn.execute(
+            "DELETE FROM sessions WHERE id NOT IN (SELECT DISTINCT session_id FROM requests WHERE session_id IS NOT NULL)"
+        )
+        conn.commit()
+        return {"requests": req_purged, "benchmarks": bench_purged, "total": req_purged + bench_purged}
+

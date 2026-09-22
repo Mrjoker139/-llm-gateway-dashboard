@@ -73,13 +73,20 @@ def load_ui_config() -> dict:
 
 
 def env_or_file(key: str, default: str) -> str:
-    """取配置: 环境变量优先, 其次 .env, 最后默认值.
+    """取配置: 环境变量优先, 其次 config.json 的 _kernel 段 (UI 可改), 其次 .env, 最后默认值.
 
     用于那些不属于"厂商 key"的全局设置 (比如代理内核地址).
     """
     val = os.environ.get(key, "").strip()
     if val:
         return val.rstrip("/")
+    # UI 配置 (config.json 的 _kernel 段): CLASH_API -> api, CLASH_PROXY -> proxy
+    ui_key = {"CLASH_API": "api", "CLASH_PROXY": "proxy"}.get(key)
+    if ui_key:
+        kernel = (load_ui_config().get("_kernel") or {})
+        v = (kernel.get(ui_key) or "").strip()
+        if v:
+            return v.rstrip("/")
     if ENV_PATH.exists():
         for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
             line = line.strip()
@@ -91,6 +98,40 @@ def env_or_file(key: str, default: str) -> str:
                 if v:
                     return v.rstrip("/")
     return default.rstrip("/")
+
+
+def set_kernel_config(kernel_api: str | None = None, proxy_url: str | None = None) -> None:
+    """保存代理内核配置 (UI 调用). 存 config.json 的 _kernel 段, 下次请求即生效."""
+    cfg = load_ui_config()
+    kernel = cfg.get("_kernel") or {}
+    if kernel_api is not None:
+        if kernel_api.strip():
+            kernel["api"] = kernel_api.strip().rstrip("/")
+        else:
+            kernel.pop("api", None)
+    if proxy_url is not None:
+        if proxy_url.strip():
+            kernel["proxy"] = proxy_url.strip().rstrip("/")
+        else:
+            kernel.pop("proxy", None)
+    if kernel:
+        cfg["_kernel"] = kernel
+    else:
+        cfg.pop("_kernel", None)
+    save_ui_config(cfg)
+
+
+def _upstream_kwargs(use_proxy: bool = False) -> dict:
+    """上游 HTTP 请求参数: 一律关掉系统代理读取 (trust_env=False).
+
+    国内厂商直连, 不受 Windows 系统代理影响 — 之前代理没开会把
+    国内厂商也一起带挂 (WinError 10061). 需要代理的厂商 (Gemini)
+    显式走 CLASH_PROXY, 代理挂了只影响它自己, 报错也清晰.
+    """
+    kwargs: dict = {"trust_env": False}
+    if use_proxy:
+        kwargs["proxy"] = env_or_file("CLASH_PROXY", "http://127.0.0.1:12450")
+    return kwargs
 
 
 def save_ui_config(cfg: dict) -> None:
@@ -164,8 +205,9 @@ def set_provider_config(pid: str, api_key: str | None, base_url: str | None) -> 
 def set_provider_enabled(pid: str, enabled: bool) -> None:
     """开关厂商 (UI 调用). 内置厂商存 config.json[pid]; 自定义厂商存 _custom 里."""
     cfg = load_ui_config()
-    if pid in cfg:                       # 内置厂商
-        entry = cfg[pid] or {}
+    builtin_ids = {cls.id for cls in PROVIDER_CLASSES}
+    if pid in builtin_ids:               # 内置厂商 (无论 config.json 中是否已有该 key)
+        entry = cfg.get(pid) or {}
         entry["enabled"] = enabled
         cfg[pid] = entry
     else:                                # 自定义厂商
@@ -265,7 +307,8 @@ def _volc_signed_request(action: str, version: str, ak: str, sk: str,
         "X-Date": x_date,
         "X-Content-Sha256": payload_hash,
     }
-    resp = httpx.post(f"https://{host}/?{query}", headers=headers, timeout=25)
+    resp = httpx.post(f"https://{host}/?{query}", headers=headers, timeout=25,
+                      trust_env=False)   # 火山计费在国内, 直连不走代理
     data = resp.json()
     meta = (data.get("ResponseMetadata") or {}).get("Error")
     if meta:
@@ -304,6 +347,7 @@ class Provider:
     base_url: str = ""
     env_key: str = ""               # .env 里 API key 的变量名
     env_base: str = ""              # 可选: 自定义 base_url 的变量名
+    use_proxy: bool = False         # True = 上游请求显式走 CLASH_PROXY (国外厂商)
 
     def __init__(self, config: dict[str, str]):
         self.config = config
@@ -326,6 +370,18 @@ class Provider:
     @property
     def configured(self) -> bool:
         return bool(self.api_key)
+
+    def _http(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """发上游请求: 国内厂商直连, 需要代理的厂商显式走 CLASH_PROXY.
+
+        trust_env=False 是关键 — 不读 Windows 系统代理. 否则代理客户端
+        没开时 (SakuraCat 之类), 国内厂商的请求也会被带挂 (10061).
+        """
+        return httpx.request(method, url, **_upstream_kwargs(self.use_proxy), **kwargs)
+
+    def _stream(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """流式请求, 代理策略同 _http."""
+        return httpx.stream(method, url, **_upstream_kwargs(self.use_proxy), **kwargs)
 
     def _headers(self) -> dict:
         headers = {
@@ -358,7 +414,7 @@ class OpenAICompatProvider(Provider):
     def list_models(self) -> list[str]:
         if not self.configured:
             return []
-        resp = httpx.get(f"{self.base_url}/models", headers=self._headers(), timeout=20)
+        resp = self._http("GET", f"{self.base_url}/models", headers=self._headers(), timeout=20)
         resp.raise_for_status()
         return sorted(m["id"] for m in resp.json().get("data", []))
 
@@ -395,7 +451,7 @@ class OpenAICompatProvider(Provider):
 
         def gen():
             nonlocal usage
-            with httpx.stream("POST", url, headers=self._headers(), json=payload,
+            with self._stream("POST", url, headers=self._headers(), json=payload,
                               timeout=timeout) as resp:
                 resp.raise_for_status()
                 for line in resp.iter_lines():
@@ -416,7 +472,7 @@ class OpenAICompatProvider(Provider):
 
         if stream:
             return gen(), usage
-        resp = httpx.post(url, headers=self._headers(), json=payload, timeout=timeout)
+        resp = self._http("POST", url, headers=self._headers(), json=payload, timeout=timeout)
         resp.raise_for_status()
         body = resp.json()
         return body, body.get("usage", {})
@@ -431,7 +487,7 @@ class DeepSeekProvider(OpenAICompatProvider):
         if not self.configured:
             return BalanceInfo(self.id, "balance", available=False, error="未配置 API key")
         try:
-            r = httpx.get(f"{self.base_url}/user/balance", headers=self._headers(), timeout=20)
+            r = self._http("GET", f"{self.base_url}/user/balance", headers=self._headers(), timeout=20)
             r.raise_for_status()
             d = r.json()
             infos = d.get("balance_infos") or []
@@ -479,7 +535,7 @@ class MoonshotProvider(OpenAICompatProvider):
     def _plan_quota(self) -> BalanceInfo | None:
         """Coding Plan 套餐: /usages 返回各时间窗的已用比例. 不是套餐则返回 None."""
         try:
-            r = httpx.get(f"{self.base_url}/usages", headers=self._headers(), timeout=20)
+            r = self._http("GET", f"{self.base_url}/usages", headers=self._headers(), timeout=20)
         except Exception as exc:  # noqa: BLE001
             return BalanceInfo(self.id, "quota", available=False, error=str(exc)[:200])
         if r.status_code == 404:
@@ -548,8 +604,8 @@ class MoonshotProvider(OpenAICompatProvider):
     def _payg_balance(self) -> BalanceInfo | None:
         """开放平台按量付费: /users/me/balance 返回可用余额. 不是该端点则返回 None."""
         try:
-            r = httpx.get(f"{self.base_url}/users/me/balance",
-                          headers=self._headers(), timeout=20)
+            r = self._http("GET", f"{self.base_url}/users/me/balance",
+                           headers=self._headers(), timeout=20)
         except Exception as exc:  # noqa: BLE001
             return BalanceInfo(self.id, "balance", available=False, error=str(exc)[:200])
         if r.status_code == 404:
@@ -608,7 +664,7 @@ class VolcanoProvider(OpenAICompatProvider):
     def _key_check(self) -> BalanceInfo:
         """没有 AK/SK 时的降级: 用 /models 验证 key 是否有效."""
         try:
-            r = httpx.get(f"{self.base_url}/models", headers=self._headers(), timeout=20)
+            r = self._http("GET", f"{self.base_url}/models", headers=self._headers(), timeout=20)
             if r.status_code == 200:
                 return BalanceInfo(self.id, "quota", raw={
                     "note": "key 有效 · 火山无余额接口, 请到控制台查额度",
@@ -655,7 +711,7 @@ class SiliconFlowProvider(OpenAICompatProvider):
         if not self.configured:
             return BalanceInfo(self.id, "balance", available=False, error="未配置 API key")
         try:
-            r = httpx.get(f"{self.base_url}/user/info", headers=self._headers(), timeout=20)
+            r = self._http("GET", f"{self.base_url}/user/info", headers=self._headers(), timeout=20)
             r.raise_for_status()
             d = r.json().get("data", {})
             return BalanceInfo(
@@ -673,6 +729,7 @@ class GeminiProvider(Provider):
     id, name, kind = "gemini", "Google Gemini", "gemini"
     base_url = "https://generativelanguage.googleapis.com/v1beta"
     env_key, env_base = "GEMINI_API_KEY", "GEMINI_BASE_URL"
+    use_proxy = True          # Google 在墙外, 显式走 CLASH_PROXY (不读系统代理)
 
     @staticmethod
     def _key_valid(key: str) -> bool:
@@ -687,7 +744,7 @@ class GeminiProvider(Provider):
     def list_models(self) -> list[str]:
         if not self.configured:
             return []
-        r = httpx.get(f"{self.base_url}/models", headers=self._headers(), timeout=20)
+        r = self._http("GET", f"{self.base_url}/models", headers=self._headers(), timeout=20)
         r.raise_for_status()
         out = []
         for m in r.json().get("models", []):
@@ -722,7 +779,7 @@ class GeminiProvider(Provider):
 
         def gen():
             nonlocal usage
-            with httpx.stream("POST", url, headers=self._headers(), json=payload,
+            with self._stream("POST", url, headers=self._headers(), json=payload,
                               timeout=timeout) as resp:
                 resp.raise_for_status()
                 for line in resp.iter_lines():
@@ -750,7 +807,7 @@ class GeminiProvider(Provider):
 
         if stream:
             return gen(), usage
-        r = httpx.post(url, headers=self._headers(), json=payload, timeout=timeout)
+        r = self._http("POST", url, headers=self._headers(), json=payload, timeout=timeout)
         r.raise_for_status()
         body = r.json()
         text = ""
@@ -786,7 +843,7 @@ class CustomProvider(OpenAICompatProvider):
         if not self.configured:
             return BalanceInfo(self.id, "quota", available=False, error="未配置 API key")
         try:
-            r = httpx.get(f"{self.base_url}/models", headers=self._headers(), timeout=15)
+            r = self._http("GET", f"{self.base_url}/models", headers=self._headers(), timeout=15)
             if r.status_code == 200:
                 return BalanceInfo(self.id, "quota", raw={"note": "端点连通, 无余额接口"})
             return BalanceInfo(self.id, "quota", available=False,

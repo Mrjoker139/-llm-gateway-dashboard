@@ -129,8 +129,59 @@ def fetch_models(use_proxy: bool = True) -> dict:
     return resp.json().get("models", {})
 
 
+def _model_sort_key(m: dict) -> tuple:
+    import re
+    mid = m["id"]
+    is_internal = mid.startswith(("chat_", "tab_"))
+    prov = (m.get("provider") or "").lower()
+    
+    # 厂商优先级: Claude / OpenAI 系列最高, 其次 Gemini
+    prov_pri = 0
+    if "anthropic" in prov or "claude" in mid.lower():
+        prov_pri = 3
+    elif "openai" in prov or "gpt" in mid.lower():
+        prov_pri = 2
+    elif "google" in prov or "gemini" in mid.lower():
+        prov_pri = 1
+
+    # 版本号提取 (例如 4.6, 3.8, 3.7, 3.1, 2.5, 120b)
+    version = (0, 0, 0)
+    if not is_internal:
+        v_match = re.search(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?", mid)
+        if v_match:
+            version = (int(v_match.group(1)), int(v_match.group(2) or 0), int(v_match.group(3) or 0))
+
+    # 档位优先: pro > high > medium > low > extra-low / lite
+    tier_pri = 0
+    mid_lower = mid.lower()
+    if "pro" in mid_lower:
+        tier_pri += 10
+    if "high" in mid_lower:
+        tier_pri += 4
+    elif "medium" in mid_lower:
+        tier_pri += 3
+    elif "low" in mid_lower:
+        tier_pri += 2
+    elif "lite" in mid_lower:
+        tier_pri += 1
+
+    # 是否有配额
+    has_quota = 1 if (m.get("remaining") is not None and m.get("remaining") > 0) else 0
+
+    return (
+        not is_internal,              # 1. 真实可用模型排前面, 内部 preview/tab 排最后
+        m.get("recommended", False),  # 2. 官方推荐模型排前面
+        has_quota,                    # 3. 有配额的排前面
+        prov_pri,                     # 4. 重点厂商 (Claude/GPT/Gemini)
+        version,                      # 5. 最新代际版本倒序 (3.8 > 3.7 > 3.6 > 3.1 > 2.5)
+        tier_pri,                     # 6. 旗舰 Pro / High 优先
+        m.get("remaining") or 0,      # 7. 剩余配额高优先
+        mid,
+    )
+
+
 def summarize_quota(models: dict) -> list[dict]:
-    """把原始模型数据整理成前端友好的列表."""
+    """把原始模型数据整理成前端友好的列表, 优先展现最新、常用、推荐的高性能模型."""
     rows = []
     for mid, m in models.items():
         quota = m.get("quotaInfo") or {}
@@ -138,6 +189,7 @@ def summarize_quota(models: dict) -> list[dict]:
         rows.append(
             {
                 "id": mid,
+                "display_name": m.get("displayName") or "",
                 "remaining": round(rf * 100, 1) if rf is not None else None,
                 "reset_time": quota.get("resetTime"),
                 "thinking": bool(m.get("supportsThinking")),
@@ -147,7 +199,8 @@ def summarize_quota(models: dict) -> list[dict]:
                 "provider": m.get("modelProvider", ""),
             }
         )
-    rows.sort(key=lambda r: (r["remaining"] is None, r["remaining"] if r["remaining"] is not None else 0, r["id"]))
+    # 按模型新旧、推荐、可用配额与能力降序排列 (最新且好用的在最上面)
+    rows.sort(key=_model_sort_key, reverse=True)
     return rows
 
 
@@ -157,12 +210,15 @@ def benchmark_model(
     max_tokens: int = 128,
     timeout: float = 90.0,
     use_proxy: bool = True,
+    access_token: str | None = None,
 ) -> dict:
     """流式调用模型, 测量首字延迟 (TTFT)、总耗时、输出 token 数.
 
     返回: {ttft_ms, total_ms, tokens, text, error}
+    access_token 传入则跳过刷新 — 批量任务复用同一个 token,
+    避免每次调用都拿 refresh_token 换票 (次数多了容易被风控).
     """
-    token = get_access_token(use_proxy)
+    token = access_token or get_access_token(use_proxy)
     proxy = PROXY if use_proxy else None
     body = {
         "model": model,
