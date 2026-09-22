@@ -127,6 +127,33 @@
   /* 拥堵分析: 每小时一根柱子 */
   .heat{display:flex;gap:2px;align-items:flex-end;height:38px;margin-top:6px}
   .heat > div{flex:1;border-radius:2px 2px 0 0;min-height:2px;position:relative}
+
+  /* 可用模型: 按厂商折叠的卡片 */
+  .avail-card{padding:0;overflow:hidden}
+  .avail-head{padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:9px;
+              justify-content:space-between;user-select:none}
+  .avail-head:hover{background:rgba(255,255,255,.02)}
+  .avail-name{display:flex;align-items:center;gap:8px;font-weight:600}
+  .avail-body{display:none;border-top:1px solid var(--border);max-height:300px;overflow-y:auto}
+  .avail-body.open{display:block}
+  .avail-model{display:flex;align-items:center;justify-content:space-between;gap:8px;
+               padding:7px 16px;font-size:12px;border-bottom:1px solid #1b1f27;cursor:pointer}
+  .avail-model:hover{background:rgba(255,255,255,.03)}
+  .avail-model .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .avail-copy{opacity:0;color:var(--accent);font-size:11px;flex-shrink:0}
+  .avail-model:hover .avail-copy{opacity:1}
+
+  /* 厂商启用/关闭开关 (厂商配置页) */
+  .switch{position:relative;display:inline-block;width:34px;height:19px;flex-shrink:0}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .slider{position:absolute;inset:0;background:#3a4150;border-radius:19px;
+                  cursor:pointer;transition:.15s}
+  .switch .slider:before{content:"";position:absolute;width:13px;height:13px;left:3px;top:3px;
+                         background:#8a93a6;border-radius:50%;transition:.15s}
+  .switch input:checked + .slider{background:var(--good)}
+  .switch input:checked + .slider:before{transform:translateX(15px);background:#fff}
+  .card.disabled-card{opacity:.55}
+  .card.disabled-card .dot.off{background:var(--border)}
 </style>
 </head>
 <body>
@@ -139,6 +166,7 @@
 <div class="tabs">
   <button id="t-usage" class="active">用量总览</button>
   <button id="t-models">模型性能</button>
+  <button id="t-avail">可用模型</button>
   <button id="t-providers">厂商配置</button>
   <button id="t-nodes">节点测速</button>
 </div>
@@ -183,6 +211,18 @@
         <th>模型</th><th>厂商</th><th>请求数</th><th>输入 token</th><th>输出 token</th><th>平均首字延迟</th>
       </tr></thead><tbody id="modelRows"><tr><td colspan="6" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr></tbody></table>
     </div>
+  </div>
+</div>
+
+<!-- ============ 可用模型 ============ -->
+<div class="panel" id="p-avail">
+  <div class="sec">
+    <div class="toolbar">
+      <button class="primary" id="refreshAvail">刷新</button>
+      <span class="sub" id="availStatus"></span>
+      <span class="sub">模型名带厂商前缀，点击即可复制到 ZCode 等工具</span>
+    </div>
+    <div id="availGroups" class="grid" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr))"></div>
   </div>
 </div>
 
@@ -385,7 +425,7 @@ function pctColor(p){ return p==null?'var(--muted)': p>50?'var(--good)': p>20?'v
 $('gwAddr').onclick = () => { navigator.clipboard.writeText($('gwAddr').textContent); toast('网关地址已复制'); };
 
 // ---------- tabs ----------
-const TABS = { usage:'p-usage', models:'p-models', providers:'p-providers', nodes:'p-nodes' };
+const TABS = { usage:'p-usage', models:'p-models', avail:'p-avail', providers:'p-providers', nodes:'p-nodes' };
 Object.keys(TABS).forEach(k => {
   $('t-'+k).onclick = () => {
     Object.entries(TABS).forEach(([kk,v]) => {
@@ -394,10 +434,82 @@ Object.keys(TABS).forEach(k => {
     });
     if (k==='usage') loadUsage();
     if (k==='models') { loadModelStats(); loadCongestion(); }
+    if (k==='avail') loadAvail();
     if (k==='providers') loadProviders();
     if (k==='nodes') loadNodes();
   };
 });
+
+// ==================== 可用模型 ====================
+let AVAIL_EXPANDED = new Set();     // 默认全收起, 厂商多时不占屏
+
+async function loadAvail(force=false){
+  const q = force ? '?refresh=1' : '';
+  const r = await fetch('/api/models'+q).then(x=>x.json());
+  const providers = r.providers || [];
+  const errors = r.errors || {};
+  const total = providers.reduce((s,g)=>s+g.models.length, 0);
+  const errCount = Object.keys(errors).length;
+  $('availStatus').textContent = `${total} 个模型 · ${providers.length} 个厂商`
+    + (errCount ? ` · ${errCount} 个厂商拉取失败` : '')
+    + (r.age!=null ? ` · 缓存 ${Math.round(r.age)}s` : '');
+  if (!providers.length && !errCount) {
+    $('availGroups').innerHTML = '<div class="card empty">还没有配置任何厂商 — 去「厂商配置」页填 API key</div>';
+    return;
+  }
+  $('availGroups').innerHTML = providers.map(g => {
+    const open = AVAIL_EXPANDED.has(g.id);
+    const badge = open ? '▾' : '▸';
+    const rows = g.models.map(m => `
+      <div class="avail-model" title="点击复制 ${m}" onclick="copyModel('${m}')">
+        <span class="mono">${m}</span>
+        <span class="avail-copy">复制</span>
+      </div>`).join('');
+    return `<div class="card avail-card">
+      <div class="avail-head" onclick="toggleAvail('${g.id}')">
+        <span class="avail-name">
+          <span class="muted" style="font-size:11px">${badge}</span>${g.name}
+          <span class="pill">${g.models.length}</span>
+        </span>
+        <span class="mono muted" style="font-size:11px">${g.id}</span>
+      </div>
+      <div class="avail-body ${open?'open':''}">${rows||'<div class="avail-model muted">无模型</div>'}</div>
+    </div>`;
+  }).join('') + Object.entries(errors).map(([pid,err]) => `
+    <div class="card avail-card">
+      <div class="avail-head" onclick="toggleAvail('${pid}')">
+        <span class="avail-name"><span class="muted" style="font-size:11px">▸</span>${pid}
+          <span class="pill warn-pill">失败</span></span>
+      </div>
+      <div class="avail-body"><div class="avail-model bad">${err}</div></div>
+    </div>`).join('');
+}
+
+window.toggleAvail = (id) => {
+  if (AVAIL_EXPANDED.has(id)) AVAIL_EXPANDED.delete(id);
+  else AVAIL_EXPANDED.add(id);
+  loadAvail();
+};
+
+window.copyModel = async (m) => {
+  try {
+    await navigator.clipboard.writeText(m);
+    toast(`已复制 ${m}`);
+  } catch(e) {
+    // clipboard API 不可用时的兜底 (如非安全上下文/权限被拒)
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = m; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast(`已复制 ${m}`);
+    } catch(e2) {
+      toast('复制失败，请手动复制');
+    }
+  }
+};
+$('refreshAvail').onclick = () => loadAvail(true);
 
 // ==================== 用量总览 ====================
 async function loadUsage(){
@@ -648,33 +760,52 @@ let PROVIDERS = [];
 async function loadProviders(){
   const r = await fetch('/api/providers').then(x=>x.json());
   PROVIDERS = r.providers || [];
-  $('providerCards').innerHTML = PROVIDERS.map(p => `<div class="card">
+  $('providerCards').innerHTML = PROVIDERS.map(p => {
+    // 灯: 关闭=灰, 开启且有 key=绿, 开启没 key=暗
+    const dotCls = !p.enabled ? 'off'
+      : p.configured ? 'on' : 'off';
+    return `<div class="card ${p.enabled?'':'disabled-card'}">
     <div class="card-h">
-      <div class="card-t"><span class="dot ${p.configured?'on':'off'}"></span>${p.name}</div>
-      <span class="pill">${p.custom?'自定义':p.kind}</span>
+      <div class="card-t"><span class="dot ${dotCls}"></span>${p.name}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="pill">${p.custom?'自定义':p.kind}</span>
+        <label class="switch" title="${p.enabled?'点击关闭':'点击开启'}">
+          <input type="checkbox" ${p.enabled?'checked':''} onchange="toggleProvider('${p.id}', this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
     </div>
-    <div class="kpi sm ${p.configured?'good':'muted'}" id="bal-${p.id}">
-      ${p.configured ? (p.api_key_masked || '已配置') : '未配置 key'}
+    <div class="kpi sm ${p.enabled&&p.configured?'good':'muted'}" id="bal-${p.id}">
+      ${!p.enabled ? '已关闭' : p.configured ? (p.api_key_masked || '已配置') : '未配置 key'}
     </div>
     <div id="plan-${p.id}"></div>
     <div style="display:grid;gap:7px;margin-top:11px">
       <label class="sub">API Key
         <input type="password" id="key-${p.id}" style="width:100%;cursor:text"
-               placeholder="${p.configured?'留空则保持不变':'填入 key'}">
+               placeholder="${p.configured?'留空则保持不变':'填入 key'}" ${p.enabled?'':'disabled'}>
       </label>
       <label class="sub">Base URL
         <input id="url-${p.id}" style="width:100%;cursor:text" value="${p.base_url}"
-               placeholder="${p.default_base_url||'https://...'}">
+               placeholder="${p.default_base_url||'https://...'}" ${p.enabled?'':'disabled'}>
       </label>
       <div style="display:flex;gap:7px">
-        <button class="primary" style="flex:1" onclick="saveProvider('${p.id}')">保存</button>
-        <button onclick="testProvider('${p.id}')">测试</button>
+        <button class="primary" style="flex:1" onclick="saveProvider('${p.id}')" ${p.enabled?'':'disabled'}>保存</button>
+        <button onclick="testProvider('${p.id}')" ${p.enabled?'':'disabled'}>测试</button>
         ${p.custom?`<button onclick="removeCustom('${p.id}')" title="删除">×</button>`:''}
       </div>
     </div>
     <div id="pm-${p.id}" class="kpi-label" style="margin-top:8px"></div>
-  </div>`).join('');
+  </div>`;
+  }).join('');
 }
+
+window.toggleProvider = async (pid, on) => {
+  const r = await fetch(`/api/providers/${pid}/toggle`, {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({enabled:on})}).then(x=>x.json());
+  if (r.ok) { toast(`${on?'已开启':'已关闭'} ${PROVIDERS.find(x=>x.id===pid)?.name||pid}`); loadProviders(); }
+  else toast('操作失败: '+r.error, 8000);
+};
 
 window.saveProvider = async (pid) => {
   const key = $('key-'+pid).value;

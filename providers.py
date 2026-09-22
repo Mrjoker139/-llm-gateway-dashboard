@@ -49,6 +49,11 @@ def load_env() -> dict[str, str]:
             values[cls.env_key] = pc["api_key"]
         if pc.get("base_url") and cls.env_base:
             values[cls.env_base] = pc["base_url"]
+        # 启用开关: 只认 UI 配置, 环境变量不管 (避免误配把开关冲掉)
+        values[f"{cls.id}_ENABLED"] = "1" if pc.get("enabled", True) else "0"
+    # 自定义厂商的启用状态也带上
+    for entry in (ui.get("_custom") or []):
+        values[f"{entry['id']}_ENABLED"] = "1" if entry.get("enabled", True) else "0"
 
     # 3. 环境变量优先级最高 (但空值不覆盖, 否则会清掉 UI/.env 里的配置)
     for key in list(values) + [k for k in os.environ if k.endswith(("_API_KEY", "_KEY", "_BASE_URL"))]:
@@ -153,6 +158,23 @@ def set_provider_config(pid: str, api_key: str | None, base_url: str | None) -> 
         cfg[pid] = entry
     else:
         cfg.pop(pid, None)
+    save_ui_config(cfg)
+
+
+def set_provider_enabled(pid: str, enabled: bool) -> None:
+    """开关厂商 (UI 调用). 内置厂商存 config.json[pid]; 自定义厂商存 _custom 里."""
+    cfg = load_ui_config()
+    if pid in cfg:                       # 内置厂商
+        entry = cfg[pid] or {}
+        entry["enabled"] = enabled
+        cfg[pid] = entry
+    else:                                # 自定义厂商
+        custom = cfg.get("_custom") or []
+        for c in custom:
+            if c["id"] == pid:
+                c["enabled"] = enabled
+                break
+        cfg["_custom"] = custom
     save_ui_config(cfg)
 
 
@@ -286,11 +308,20 @@ class Provider:
     def __init__(self, config: dict[str, str]):
         self.config = config
         self.api_key = config.get(self.env_key, "").strip()
+        if not self._key_valid(self.api_key):
+            self.api_key = ""          # 明显不是本厂商的 key, 视为未配置
         if self.env_base and config.get(self.env_base):
             self.base_url = config[self.env_base].strip().rstrip("/")
         # 客户端原始 User-Agent, 由网关在转发时填入.
         # 透传它能让上游看到"真实工具"而不是 python-httpx, 更像正常客户端.
         self.client_ua: str = ""
+        # UI 上的启用开关 (存 config.json). 关闭后网关不路由、模型列表不含它.
+        self.enabled = config.get(f"{self.id}_ENABLED", "1") not in ("0", "false", "False")
+
+    @staticmethod
+    def _key_valid(key: str) -> bool:
+        """key 格式粗校验. 基类不设限; 子类可覆写 (如 Gemini 必须 AIza 开头)."""
+        return bool(key)
 
     @property
     def configured(self) -> bool:
@@ -554,6 +585,17 @@ class VolcanoProvider(OpenAICompatProvider):
         self.access_key = config.get(self.env_ak, "").strip()
         self.secret_key = config.get(self.env_sk, "").strip()
 
+    def list_models(self) -> list[str]:
+        # 火山 Coding/Agent Plan 端点不提供 /models 列表 (一律 404).
+        # 套餐里能用的模型基本是固定这几个, 直接兜底返回, 免得看板上报错.
+        try:
+            return super().list_models()
+        except Exception:  # noqa: BLE001
+            return [
+                "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4.1-flash",
+                "glm-5.3", "glm-5.3-flash", "kimi-k3",
+            ]
+
     def fetch_balance(self) -> BalanceInfo:
         if not self.configured:
             return BalanceInfo(self.id, "quota", available=False, error="未配置 API key")
@@ -631,6 +673,13 @@ class GeminiProvider(Provider):
     id, name, kind = "gemini", "Google Gemini", "gemini"
     base_url = "https://generativelanguage.googleapis.com/v1beta"
     env_key, env_base = "GEMINI_API_KEY", "GEMINI_BASE_URL"
+
+    @staticmethod
+    def _key_valid(key: str) -> bool:
+        # Gemini key 固定以 AIza 开头. 环境变量里常混进其他家的 key
+        # (比如 sk-ant-api03 这种 Anthropic 的), 格式不对就视为未配置,
+        # 免得灯亮着但一调就 400.
+        return key.startswith("AIza")
 
     def _headers(self) -> dict:
         return {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
@@ -730,6 +779,7 @@ class CustomProvider(OpenAICompatProvider):
         self.env_base = ""
         self.api_key = entry.get("api_key", "")
         self.config = config
+        self.enabled = entry.get("enabled", True)
 
     def fetch_balance(self) -> BalanceInfo:
         """自定义端点没有统一的余额接口, 只验证连通性."""
@@ -779,6 +829,7 @@ def provider_status(providers: dict[str, Provider]) -> list[dict]:
             "name": p.name,
             "kind": p.kind,
             "configured": p.configured,
+            "enabled": p.enabled,
             "base_url": p.base_url,
             "custom": p.id in custom_ids,
             "api_key_masked": mask_key(getattr(p, "api_key", "")),

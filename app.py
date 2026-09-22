@@ -16,6 +16,7 @@ import os
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
 import httpx
@@ -25,7 +26,8 @@ import antigravity as ag
 import gateway
 import usage_db as db
 from providers import (build_providers, provider_status, set_provider_config,
-                       add_custom_provider, remove_custom_provider, env_or_file)
+                       set_provider_enabled, add_custom_provider,
+                       remove_custom_provider, env_or_file)
 
 # ---- 代理内核 (Clash 风格 API) ----
 # 默认对应 SakuraCat; 其他客户端只要提供兼容的 Clash 控制 API 就能用.
@@ -483,14 +485,14 @@ def _pick_provider(model: str):
     provider_id, real_model = _resolve_provider(model)
     if provider_id:
         p = PROVIDERS[provider_id]
-        # 明确指定了厂商但没配 key: 返回 None 让上层给清晰的错误提示
-        return (p, real_model) if p.configured else (None, real_model)
+        # 明确指定了厂商但没配 key / 被关闭: 返回 None 让上层给清晰的错误提示
+        return (p, real_model) if p.configured and p.enabled else (None, real_model)
     # 没前缀: 按模型名猜, 或按请求头
     header = (request.headers.get("X-Provider") or "").strip()
-    if header in PROVIDERS and PROVIDERS[header].configured:
+    if header in PROVIDERS and PROVIDERS[header].configured and PROVIDERS[header].enabled:
         return PROVIDERS[header], model
     for pid, p in PROVIDERS.items():
-        if p.configured:
+        if p.configured and p.enabled:
             return p, model
     return None, model
 
@@ -502,28 +504,82 @@ def gw_chat_completions():
     provider, real_model = _pick_provider(model)
     if provider is None:
         pid, _ = _resolve_provider(model)
-        hint = (f"厂商 {pid} 未配置 API key" if pid else "没有任何已配置的厂商")
-        return jsonify({"error": {"message": f"{hint} — 请在 .env 里填 key 后重启服务",
+        if pid in PROVIDERS and not PROVIDERS[pid].enabled:
+            hint = f"厂商 {pid} 已在仪表盘关闭"
+        else:
+            hint = (f"厂商 {pid} 未配置 API key" if pid else "没有任何已配置的厂商")
+        return jsonify({"error": {"message": f"{hint} — 请在「厂商配置」页检查",
                                   "type": "no_provider"}}), 503
     body["model"] = real_model
     return gateway.handle_chat_completion(provider, body, request)
 
 
+# ---- 模型列表: 缓存 + 容错 ----
+# 之前每次请求 /v1/models 都要实时打各厂商的 /models 接口, 一个厂商慢/挂
+# 会把整个接口拖到好几秒 (实测 5.9s). 现在按厂商缓存 5 分钟, 并用线程池
+# 并行拉取, 单个厂商失败只影响自己, 不影响其他厂商的模型.
+
+_MODELS_TTL = 300                     # 缓存秒数
+_MODELS_CACHE: dict[str, tuple[float, list[dict], str | None]] = {}
+
+
+def _fetch_provider_models(pid: str, p) -> tuple[str, list[dict] | None, str | None]:
+    """拉单个厂商的模型列表. 失败返回 (pid, None, error), 不影响别的厂商."""
+    try:
+        return pid, [f"{pid}/{m}" for m in p.list_models()], None
+    except Exception as exc:  # noqa: BLE001
+        return pid, None, f"{type(exc).__name__}: {exc}"[:200]
+
+
+def _models_cached(force: bool = False) -> dict:
+    """返回 {providers: [...], errors: {...}, fetched_at, age}."""
+    now = time.time()
+    if not force and _MODELS_CACHE.get("_at") and now - _MODELS_CACHE["_at"] < _MODELS_TTL:
+        return _MODELS_CACHE
+
+    providers = [p for p in PROVIDERS.values() if p.configured and p.enabled]
+    with ThreadPoolExecutor(max_workers=max(4, len(providers))) as ex:
+        results = list(ex.map(lambda p: _fetch_provider_models(p.id, p), providers))
+
+    out = {"providers": [], "errors": {}, "fetched_at": now}
+    for pid, models, err in results:
+        if err is not None:
+            out["errors"][pid] = err
+        else:
+            out["providers"].append({"id": pid, "name": PROVIDERS[pid].name, "models": models})
+    _MODELS_CACHE.clear()
+    _MODELS_CACHE.update(out)
+    _MODELS_CACHE["_at"] = now
+    return _MODELS_CACHE
+
+
 @app.get("/v1/models")
 def gw_models():
-    """聚合所有已配置厂商的模型列表, 带厂商前缀."""
-    out = []
-    for pid, p in PROVIDERS.items():
-        if not p.configured:
-            continue
-        try:
-            for m in p.list_models():
-                out.append({
-                    "id": f"{pid}/{m}", "object": "model", "owned_by": pid,
-                })
-        except Exception:  # noqa: BLE001
-            continue
+    """聚合所有已配置厂商的模型列表, 带厂商前缀 (OpenAI 标准格式)."""
+    data = _models_cached()
+    out = [
+        {"id": m, "object": "model", "owned_by": g["id"]}
+        for g in data["providers"] for m in g["models"]
+    ]
     return jsonify({"object": "list", "data": out})
+
+
+@app.get("/api/models")
+def api_models():
+    """看板用的模型列表: 按厂商分组 + 每个厂商的配置/拉取状态.
+
+    比 /v1/models 多带厂商名和失败原因, 让用户一眼看出"哪个厂商没拉到"。
+    ?refresh=1 强制刷新缓存 (改完厂商配置后手动刷新用).
+    """
+    force = request.args.get("refresh") == "1"
+    data = _models_cached(force=force)
+    return jsonify({
+        "ok": True,
+        "providers": data["providers"],
+        "errors": data["errors"],
+        "fetched_at": data["fetched_at"],
+        "age": int(time.time() - data["fetched_at"]),
+    })
 
 
 # ============================================================ 用量看板 API
@@ -645,6 +701,18 @@ def api_set_provider_config(pid: str):
     p = PROVIDERS[pid]
     return jsonify({"ok": True, "configured": p.configured,
                     "base_url": p.base_url, "api_key_masked": _mask(p.api_key)})
+
+
+@app.post("/api/providers/<pid>/toggle")
+def api_toggle_provider(pid: str):
+    """开关厂商: 关闭后网关不路由、模型列表不含它. 立即生效."""
+    body = request.get_json(force=True) or {}
+    if pid not in PROVIDERS:
+        return jsonify({"ok": False, "error": "unknown provider"}), 404
+    enabled = bool(body.get("enabled", not PROVIDERS[pid].enabled))
+    set_provider_enabled(pid, enabled)
+    reload_providers()
+    return jsonify({"ok": True, "id": pid, "enabled": PROVIDERS[pid].enabled})
 
 
 @app.post("/api/providers/custom")
