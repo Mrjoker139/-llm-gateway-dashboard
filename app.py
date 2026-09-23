@@ -558,13 +558,27 @@ def _resolve_provider(model: str) -> tuple[str | None, str]:
     return None, model
 
 
+class UnknownProvider(Exception):
+    """model 带了厂商前缀但该前缀未注册. 消息直接返回给客户端."""
+
+    def __init__(self, prefix: str):
+        known = ", ".join(sorted(PROVIDERS))
+        super().__init__(
+            f"未知厂商前缀 \"{prefix}\" — 已注册: {known}. "
+            f"请检查模型名拼写, 或用请求头 X-Provider 指定厂商")
+
+
 def _pick_provider(model: str):
     provider_id, real_model = _resolve_provider(model)
     if provider_id:
         p = PROVIDERS[provider_id]
         # 明确指定了厂商但没配 key / 被关闭: 返回 None 让上层给清晰的错误提示
         return (p, real_model) if p.configured and p.enabled else (None, real_model)
-    # 没前缀: 按模型名猜, 或按请求头
+    # 带 "/" 但前缀没匹配上 = 拼写错误或未注册的厂商. 必须报错, 不能兜底 —
+    # 静默落到别家厂商会把用量记错户头, 钱花了都不知道 (valcano→volcano 的教训).
+    if "/" in model:
+        raise UnknownProvider(model.partition("/")[0])
+    # 没前缀: 按请求头, 否则取第一个已配置且启用的厂商 (老行为, 调用方自己决定要不要依赖)
     header = (request.headers.get("X-Provider") or "").strip()
     if header in PROVIDERS and PROVIDERS[header].configured and PROVIDERS[header].enabled:
         return PROVIDERS[header], model
@@ -578,7 +592,10 @@ def _pick_provider(model: str):
 def gw_chat_completions():
     body = request.get_json(force=True, silent=True) or {}
     model = body.get("model", "")
-    provider, real_model = _pick_provider(model)
+    try:
+        provider, real_model = _pick_provider(model)
+    except UnknownProvider as exc:
+        return jsonify({"error": {"message": str(exc), "type": "unknown_provider"}}), 400
     if provider is None:
         pid, _ = _resolve_provider(model)
         if pid in PROVIDERS and not PROVIDERS[pid].enabled:
