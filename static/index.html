@@ -5,6 +5,8 @@
 <title>LLM 网关仪表盘</title>
 <style>
   :root {
+    /* 关键: 声明深色 color-scheme，原生控件(下拉弹层/滚动条/表单控件)才会按深色渲染，杜绝白底白字 */
+    color-scheme: dark;
     --bg: #090b10;
     --bg-gradient: radial-gradient(1200px 600px at 50% -40px, rgba(30, 41, 59, 0.4) 0%, transparent 70%),
                    radial-gradient(900px 500px at 85% 180px, rgba(15, 23, 42, 0.5) 0%, transparent 60%);
@@ -29,6 +31,8 @@
     --bad-border: rgba(225, 29, 72, 0.35);
 
     --accent: #94a3b8;
+    /* 降饱和薰衣草紫: 纯 #a855f7 在表格元素上太艳 */
+    --purple: #9b83d6;
   }
 
   * { box-sizing: border-box; }
@@ -38,24 +42,34 @@
   body {
     margin: 0;
     background-color: var(--bg);
-    background-image: var(--bg-gradient);
-    background-attachment: fixed;
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     font-size: 14px;
     line-height: 1.6;
-    letter-spacing: -0.01em;
+    /* 中文排版: 微量正字距让汉字有呼吸感，负值会把汉字挤在一起 */
+    letter-spacing: 0.03em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* 全局背景渐变放在独立 fixed 合成层: background-attachment:fixed 是著名的 Chromium 重绘缺陷源，
+     悬停等任何重绘都会让整张固定背景闪烁抖动、叠在上面的 SVG 图标花掉; 独立层后只重绘渐变自身 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: var(--bg-gradient);
+    z-index: -1;
+    pointer-events: none;
   }
 
   header {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: rgba(9, 11, 16, 0.85);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    /* 弃用 backdrop-filter: 悬停重绘时毛玻璃逐帧重算会让整页抖动 (Chromium 合成缺陷)。
+       在固定背景层之上，半透明渐变底色的视觉一致且稳定 */
+    background: linear-gradient(180deg, rgba(13, 16, 23, 0.94) 0%, rgba(9, 11, 16, 0.86) 100%);
     padding: 12px 30px;
     min-height: 60px;
     border-bottom: 1px solid var(--border);
@@ -70,7 +84,6 @@
     font-size: 16px;
     margin: 0;
     font-weight: 650;
-    letter-spacing: -0.02em;
     display: flex;
     align-items: center;
     gap: 9px;
@@ -137,8 +150,9 @@
   /* ==================== 顶级亚克力毛玻璃卡片 (零模糊防抖动 + 大气全局漫射) ==================== */
   .card {
     background: linear-gradient(145deg, rgba(22, 27, 38, 0.72) 0%, rgba(12, 15, 23, 0.85) 100%);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    /* 模糊半径收敛到 14px: 足够出毛玻璃质感，又大幅降低卡内悬停重绘时的模糊重算抖动 */
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 14px;
     padding: 19px 22px;
@@ -218,11 +232,14 @@
   }
 
   .card-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .card-t { font-size: 15.5px; font-weight: 650; display: flex; align-items: center; gap: 9px; letter-spacing: -0.015em; }
+  .card-t { font-size: 15.5px; font-weight: 650; display: flex; align-items: center; gap: 9px; }
 
-  /* 状态指示点: 柔和微光环, 杜绝扎眼荧光 */
+  /* 状态指示点: 渐变晕染小灯, 柔和光晕, 杜绝扎眼荧光 */
   .dot { width: 7.5px; height: 7.5px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-  .dot.on { background: #38b284; box-shadow: 0 0 0 2.5px rgba(56, 178, 132, 0.22); }
+  .dot.on {
+    background: radial-gradient(circle at 35% 30%, #86dcb6 0%, #38b284 58%, #2b8f68 100%);
+    box-shadow: 0 0 5px rgba(56, 178, 132, 0.5), 0 0 0 2.5px rgba(56, 178, 132, 0.14);
+  }
   .dot.off { background: #333946; }
 
   .kpi { font-size: 28px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.2; letter-spacing: -0.03em; }
@@ -240,13 +257,21 @@
   tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
 
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  /* 数字单元格绝不折行: 大位数 token 量在窄列里被拦腰折断很难看 */
+  .num { white-space: nowrap; }
   .muted { color: var(--muted); }
   .sub { color: var(--text-sec); font-size: 13px; }
   .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
 
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  /* 工具栏控件统一 32px 高: 独立按钮与下拉/按钮组并排时不再高低错落 */
+  .toolbar > button {
+    min-height: 32px;
+    padding: 5px 16px;
+  }
 
-  /* ==================== 统一高级毛玻璃按钮设计系统 (统一步调、加粗加大、杜绝错位) ==================== */
+  /* ==================== 统一毛玻璃按钮设计系统 ==================== */
+  /* 边缘由"柔和描边 + 内高光 + 外阴影"塑造，无白色描边线；hover 是整体提亮 + 一圈环境光晕 */
   button {
     display: inline-flex;
     align-items: center;
@@ -260,58 +285,59 @@
     border-radius: 9px;
     cursor: pointer;
     user-select: none;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 100%);
+    background: rgba(255, 255, 255, 0.055);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    border-top: 1px solid rgba(255, 255, 255, 0.28);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.35);
-    color: #e2e8f0;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #dbe3ee;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.07);
     /* 移除 transform: translateY 杜绝右上角按钮悬停时下方按钮跟随晃动/重排 */
     transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
   }
   button:hover {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%);
-    border-color: rgba(255, 255, 255, 0.22);
-    border-top-color: rgba(255, 255, 255, 0.48);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.16);
     color: #ffffff;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45),
+                0 0 0 3px rgba(255, 255, 255, 0.045),
+                inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
   button:active {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
-  /* 主要按钮 (Primary): 高密度透光晶体玻璃，与次级按钮材质深度统一，绝不突兀 */
+  /* 主要按钮: 同材质的加深版，靠明度区分主次，视觉语言一致 */
   button.primary {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.24);
-    border-top: 1px solid rgba(255, 255, 255, 0.58);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14);
     color: #ffffff;
     font-weight: 700;
   }
   button.primary:hover {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.13) 100%);
-    border-color: rgba(255, 255, 255, 0.36);
-    border-top-color: rgba(255, 255, 255, 0.78);
-    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.21);
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55),
+                0 0 0 3px rgba(255, 255, 255, 0.06),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
   button.danger {
-    background: linear-gradient(180deg, rgba(225, 29, 72, 0.18) 0%, rgba(225, 29, 72, 0.08) 100%);
+    background: rgba(225, 29, 72, 0.14);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(225, 29, 72, 0.3);
-    border-top: 1px solid rgba(225, 29, 72, 0.55);
     color: #fda4af;
-    box-shadow: 0 4px 14px rgba(225, 29, 72, 0.2);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
   button.danger:hover {
-    background: linear-gradient(180deg, rgba(225, 29, 72, 0.28) 0%, rgba(225, 29, 72, 0.14) 100%);
+    background: rgba(225, 29, 72, 0.22);
+    border-color: rgba(225, 29, 72, 0.42);
     color: #fff;
-    box-shadow: 0 6px 20px rgba(225, 29, 72, 0.35);
+    box-shadow: 0 6px 18px rgba(225, 29, 72, 0.3),
+                0 0 0 3px rgba(225, 29, 72, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
   /* 小尺寸按钮: 紧凑但保持足够触控高度与清晰字阶 */
@@ -356,8 +382,41 @@
     color: #ffffff !important;
   }
   input:not([type="checkbox"]):not([type="radio"])::placeholder {
-    color: #64748b !important;
+    color: #7d8ca3 !important;
     opacity: 1 !important;
+  }
+
+  /* 定制下拉: 隐藏原生箭头，换成细线 chevron，右侧预留箭头空间 */
+  select:not([type="checkbox"]):not([type="radio"]) {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 10px center !important;
+    padding-right: 30px !important;
+    cursor: pointer;
+  }
+  /* 工具栏里的紧凑下拉 */
+  select.sm {
+    padding: 4px 28px 4px 10px !important;
+    font-size: 12px !important;
+    min-height: 30px;
+  }
+
+  /* 下拉弹层选项: 强制深色底 + 浅色字。
+     select 上的 color: #f8fafc !important 会被 option 继承，而原生弹层默认浅色底，
+     不覆盖 option 就会出现白字白底完全不可读 */
+  select option,
+  select optgroup {
+    background-color: #141824;
+    color: #e2e8f0;
+  }
+
+  /* 禁用输入态与禁用卡片呼应，一眼可辨不可编辑 */
+  input:disabled,
+  select:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   /* 复选框专用高质感现代规范: 绝对稳固，零抖动，零尺寸形变 */
@@ -447,47 +506,44 @@
   }
 
   .chart { display: flex; align-items: flex-end; gap: 3px; height: 85px; margin-top: 14px; }
-  .chart > div { flex: 1; background: linear-gradient(to top, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.06)); border-radius: 2px 2px 0 0; min-height: 2px; }
+  /* 低饱和雾霾蓝: 灰白柱在暗背景上太不显, 纯白又太跳 */
+  .chart > div { flex: 1; background: linear-gradient(to top, rgba(110, 160, 190, 0.85) 0%, rgba(110, 160, 190, 0.3) 100%); border-radius: 2px 2px 0 0; min-height: 2px; }
   .empty { color: var(--muted); font-size: 13.5px; padding: 26px 0; text-align: center; }
 
-  /* 现代 Segmented Control Tab 栏: 毛玻璃微胶囊 */
+  /* 全宽段控式导航: 与内容区等宽，四段均分，成为页面结构的一部分而非漂浮小胶囊 */
   .nav-tabs {
-    display: inline-flex;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    display: flex;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.03);
     padding: 4px;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-top: 1px solid rgba(255, 255, 255, 0.15);
     gap: 4px;
     margin-bottom: 24px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(0, 0, 0, 0.5);
   }
   .nav-tabs button {
+    flex: 1;
+    justify-content: center;
+    white-space: nowrap;
     border: 1px solid transparent;
     background: transparent;
-    padding: 8px 18px;
+    padding: 8px 10px;
     font-size: 13.5px;
     font-weight: 550;
     color: var(--muted);
     border-radius: 8px;
     cursor: pointer;
     box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
     min-height: 36px;
     transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .nav-tabs button:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
   .nav-tabs button.active {
     color: #ffffff;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-top: 1px solid rgba(255, 255, 255, 0.32);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
     font-weight: 650;
   }
   .nav-tabs button svg { opacity: 0.7; }
@@ -586,7 +642,6 @@
   .chip {
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--border);
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 20px;
     padding: 5px 14px;
     font-size: 12.5px;
@@ -669,19 +724,11 @@
     min-width: 260px;
     max-width: 420px;
   }
-  .search-input-wrap .search-icon {
-    position: absolute;
-    left: 12px;
-    font-size: 14px;
-    color: var(--muted);
-    pointer-events: none;
-    z-index: 2;
-  }
   .search-input-wrap input {
     width: 100% !important;
-    padding: 8px 36px 8px 36px !important;
+    padding: 4px 32px 4px 13px !important;
     font-size: 13.5px !important;
-    height: 38px !important;
+    height: 32px !important;
   }
   button.search-clear-btn {
     position: absolute !important;
@@ -731,6 +778,96 @@
     justify-content: center !important;
     flex-shrink: 0 !important;
   }
+
+  /* 超紧凑行内小按钮 (节点行切换/IP 等): 与行内 13px 文字协调的精致比例 */
+  button.xs {
+    min-height: 26px !important;
+    padding: 3px 12px !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    border-radius: 7px !important;
+    min-width: 42px !important;
+  }
+
+  /* 按钮组: 段控式容器，主次按钮在同一玻璃底座里靠明度分层，你中有我而非对立并置 */
+  .btn-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+  .btn-group.stretch { display: flex; }
+  .btn-group.stretch button { flex: 1; }
+  .btn-group button {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    min-height: 26px;
+    padding: 4px 14px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-sec);
+  }
+  .btn-group button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    color: #ffffff;
+    box-shadow: none;
+  }
+  .btn-group button.primary {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  .btn-group button.primary:hover {
+    background: rgba(255, 255, 255, 0.22);
+    border: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 2px 10px rgba(0, 0, 0, 0.35);
+  }
+
+  /* ==================== 定制下拉组件 (替代原生弹层) ==================== */
+  /* 宽度自适应内容: width:100% 会在 flex 工具栏里挤爆 siblings (按钮被压到 50px) */
+  .dd-wrap { position: relative; display: inline-flex; min-width: 90px; flex-shrink: 0; }
+  .dd-wrap select { display: none; }
+  .dd-btn { width: 100%; min-height: 32px; padding: 5px 12px; font-weight: 550; justify-content: space-between; gap: 8px; }
+  .dd-btn .dd-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dd-btn svg { flex-shrink: 0; opacity: 0.7; transition: transform 0.15s ease; }
+  .dd-btn.open svg { transform: rotate(180deg); }
+  .dd-wrap.sm .dd-btn { min-height: 32px; padding: 4px 10px; font-size: 12px; }
+  /* 菜单挂到 body 下 fixed 定位，不被卡片 overflow:hidden 裁剪 */
+  .dd-menu {
+    display: none;
+    position: fixed;
+    z-index: 999;
+    background: rgba(18, 21, 30, 0.97);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    overflow-y: auto;
+  }
+  .dd-menu.open { display: block; animation: fadeIn 0.12s ease-in-out; }
+  .dd-item {
+    padding: 7px 11px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--text-sec);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dd-item:hover { background: rgba(255, 255, 255, 0.08); color: #ffffff; }
+  .dd-item.sel { color: #ffffff; background: rgba(255, 255, 255, 0.07); }
 
   /* 厂商接入表单与输入框 */
   .provider-card {
@@ -828,7 +965,6 @@
       <!-- 搜索筛选与代际切换区: 明确为过滤工具，杜绝地址/密钥混淆 -->
       <div class="quota-filter-toolbar">
         <div class="search-input-wrap">
-          <span class="search-icon">🔍</span>
           <input type="text" id="quotaSearch" name="dashboard_model_search_no_fill" placeholder="搜索模型名称或代际 (如 3.8, claude, gpt)..." autocomplete="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
           <button id="clearQuotaSearch" class="search-clear-btn" style="display:none" title="清空搜索">×</button>
         </div>
@@ -848,7 +984,7 @@
         <label class="sub"><input type="checkbox" id="onlyRec"> 只看推荐</label>
         <span class="sub" style="opacity:0.4">|</span>
         <label class="sub">排序:
-          <select id="quotaSortSel" style="padding:3px 8px;font-size:12px">
+          <select id="quotaSortSel" class="sm">
             <option value="smart" selected>默认最新代际 (3.8 > 3.7 > 2.5)</option>
             <option value="remaining_desc">剩余配额从高到低</option>
             <option value="remaining_asc">剩余配额从低到高</option>
@@ -857,8 +993,10 @@
           </select>
         </label>
         <span class="sub" style="opacity:0.4">|</span>
-        <button id="benchSelected">测试勾选的模型</button>
-        <button id="benchTop">测试前 3 个推荐</button>
+        <div class="btn-group">
+          <button id="benchSelected">测试勾选的模型</button>
+          <button id="benchTop">测试前 3 个推荐</button>
+        </div>
         <span class="sub" id="benchProgress"></span>
       </div>
       <div class="prog"><i id="mbar"></i></div>
@@ -919,7 +1057,7 @@
     <div class="card-h" style="margin-bottom:8px">
       <h2 class="sec-title" style="margin:0">模型性能透视 · 延迟与生成速率 (P10 / P50 / P90 / AVG)</h2>
       <div style="display:flex;align-items:center;gap:8px">
-        <select id="mWinSel" style="padding:3px 8px;font-size:12px">
+        <select id="mWinSel" class="sm">
           <option value="24">最近 24 小时</option>
           <option value="168" selected>最近 7 天</option>
           <option value="720">最近 30 天</option>
@@ -1017,7 +1155,7 @@
         <label class="sub">名称<br><input type="text" id="cfName" style="width:100%;cursor:text" placeholder="例如 智谱 GLM"></label>
         <label class="sub">Base URL<br><input type="text" id="cfUrl" style="width:100%;cursor:text" placeholder="https://open.bigmodel.cn/api/paas/v4"></label>
         <label class="sub">API Key<br><input id="cfKey" type="password" style="width:100%;cursor:text" placeholder="sk-..."></label>
-        <div style="display:flex;gap:9px">
+        <div class="btn-group">
           <button class="primary" id="cfSave">保存端点</button>
           <button id="cfCancel">取消</button>
         </div>
@@ -1076,13 +1214,15 @@
         <b id="attemptsLabel">3</b> 次。<b>测完自动切回原节点。</b>
       </div>
       <div class="toolbar">
-        <button class="primary" id="checkNodes">检测勾选节点</button>
-        <button id="selectAllNodes">全选未测 (每区抽2个)</button>
-        <button id="clearNodes">清空勾选</button>
+        <div class="btn-group">
+          <button class="primary" id="checkNodes">检测勾选节点</button>
+          <button id="selectAllNodes">全选未测 (每区抽2个)</button>
+          <button id="clearNodes">清空勾选</button>
+        </div>
         <label class="sub">
           <input type="checkbox" id="retestChecked"> 重测已测过的</label>
         <label class="sub">每节点测
-          <select id="nodeAttempts" style="padding:2px 6px">
+          <select id="nodeAttempts" class="sm">
             <option value="1">1 次</option>
             <option value="3" selected>3 次</option>
             <option value="5">5 次</option>
@@ -1110,9 +1250,11 @@
           <option value="latency">按延迟排序</option>
           <option value="status">可用的排前面</option>
         </select>
-        <button class="primary sm" id="testAll">测速全部</button>
-        <button class="sm" id="testFailed">仅测失败</button>
-        <button class="sm" id="collapseAll">全部收起</button>
+        <div class="btn-group">
+          <button class="primary" id="testAll">测速全部</button>
+          <button id="testFailed">仅测失败</button>
+          <button id="collapseAll">全部收起</button>
+        </div>
       </div>
     </div>
     <div class="sub" style="margin-bottom:10px" id="nodeStatus">连接中…</div>
@@ -1139,7 +1281,9 @@ function toast(msg, ms=5000){
   t._t=setTimeout(()=>t.style.display='none', ms);
 }
 function fmt(n){ return n==null ? '—' : Number(n).toLocaleString(); }
-function pctColor(p){ return p==null?'var(--muted)': p>50?'var(--good)': p>20?'var(--warn)':'var(--bad)'; }
+/* 数据可视化统一用降饱和语义色: 纯主题色在密集图表元素上太艳 */
+const VIZ_GOOD = '#4aa98a', VIZ_WARN = '#cf9a52', VIZ_BAD = '#cf5566';
+function pctColor(p){ return p==null?'var(--muted)': p>50?VIZ_GOOD: p>20?VIZ_WARN:VIZ_BAD; }
 
 const gwEl = $('gwAddr');
 if (gwEl) {
@@ -1296,7 +1440,7 @@ function renderPlans(planList) {
     const wins = p.windows || [];
     const winHtml = wins.map(w => {
       const used = w.used_pct;
-      const color = used == null ? 'var(--muted)' : used < 50 ? 'var(--good)' : used < 80 ? 'var(--warn)' : 'var(--bad)';
+      const color = used == null ? 'var(--muted)' : used < 50 ? VIZ_GOOD : used < 80 ? VIZ_WARN : VIZ_BAD;
       const reset = w.reset_time ? new Date(w.reset_time).toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}) : null;
       const counts = (w.used != null && w.limit != null) ? ` <span class="muted">(${w.used}/${w.limit})</span>` : '';
       return `<div class="plan-window">
@@ -1948,14 +2092,15 @@ async function loadCongestion(){
     const vals = (m.hourly||[]).map(x=>x.norm_ttft||0);
     const maxTtft = Math.max(...vals, 1);
     const ratio = m.congestion_ratio;
-    const ratioCls = ratio==null?'muted': ratio>=2?'bad': ratio>=1.4?'warn':'good';
+    const ratioColor = ratio==null ? 'var(--muted)' : ratio>=2 ? VIZ_BAD : ratio>=1.4 ? VIZ_WARN : VIZ_GOOD;
     const bars = Array.from({length:24}, (_,h) => {
       const x = byHour[h];
       if (!x || x.norm_ttft==null)
         return `<div style="height:2px;background:#2a3038" title="${h}:00 无数据"></div>`;
       const pct = Math.max(6, x.norm_ttft/maxTtft*100);
-      const c = x.norm_ttft/maxTtft > 0.75 ? 'var(--bad)'
-              : x.norm_ttft/maxTtft > 0.45 ? 'var(--warn)' : 'var(--good)';
+      /* 降饱和版本的主题色: 纯 --good/--bad 在密集小柱上显得刺眼 */
+      const c = x.norm_ttft/maxTtft > 0.75 ? '#cf5566'
+              : x.norm_ttft/maxTtft > 0.45 ? '#cf9a52' : '#4aa98a';
       return `<div style="height:${pct.toFixed(0)}%;background:${c}"
         title="${h}:00 · ${(x.norm_ttft/1000).toFixed(2)}s（原始 ${(x.median_ttft/1000).toFixed(2)}s · prompt 中位 ${fmt(x.median_input)}）· ${x.requests} 次${x.median_tps?' · '+x.median_tps+' tok/s':''}"></div>`;
     }).join('');
@@ -1965,15 +2110,15 @@ async function loadCongestion(){
           <span class="mono">${m.model}</span>
           <span class="pill">${m.provider}</span>
         </div>
-        <span class="pill" style="border-color:var(--${ratioCls==='muted'?'border':ratioCls==='bad'?'bad':ratioCls==='warn'?'warn':'good'});color:var(--${ratioCls==='muted'?'muted':ratioCls})">
+        <span class="pill" style="border-color:${ratioColor};color:${ratioColor}">
           拥堵 ${ratio!=null?ratio+'×':'—'}
         </span>
       </div>
       <div class="heat">${bars}</div>
       <div class="card-row" style="margin-top:9px;padding-top:9px">
-        <div><div class="kpi sm good">${(m.best_ttft/1000).toFixed(1)}s</div>
+        <div><div class="kpi sm" style="color:${VIZ_GOOD}">${(m.best_ttft/1000).toFixed(1)}s</div>
              <div class="kpi-label">最快 ${m.best_hour}:00</div></div>
-        <div><div class="kpi sm bad">${(m.worst_ttft/1000).toFixed(1)}s</div>
+        <div><div class="kpi sm" style="color:${VIZ_BAD}">${(m.worst_ttft/1000).toFixed(1)}s</div>
              <div class="kpi-label">最慢 ${m.worst_hour}:00</div></div>
         <div><div class="kpi sm">${fmt(m.samples)}</div>
              <div class="kpi-label">样本 · ${m.hours_covered} 个时段</div></div>
@@ -2020,9 +2165,11 @@ async function loadProviders(){
           <input type="text" id="url-${p.id}" autocomplete="off" spellcheck="false" style="width:100%;cursor:text" value="${p.base_url}"
                  placeholder="${p.default_base_url||'https://...'}" ${p.enabled?'':'disabled'}>
         </label>
-        <div style="display:flex;gap:9px">
-          <button class="primary" style="flex:1" onclick="saveProvider('${p.id}')" ${p.enabled?'':'disabled'}>保存</button>
-          <button style="flex:1" onclick="testProvider('${p.id}')" ${p.enabled?'':'disabled'}>测试连通</button>
+        <div style="display:flex;gap:9px;align-items:center">
+          <div class="btn-group stretch" style="flex:1">
+            <button class="primary" onclick="saveProvider('${p.id}')" ${p.enabled?'':'disabled'}>保存</button>
+            <button onclick="testProvider('${p.id}')" ${p.enabled?'':'disabled'}>测试连通</button>
+          </div>
           ${p.custom?`<button class="danger icon-btn" onclick="removeCustom('${p.id}')" title="删除">×</button>`:''}
         </div>
       </div>
@@ -2230,8 +2377,7 @@ let NODES = { selector:null, current:null, list:[], delays:{}, expanded:new Set(
               picked:new Set(), checks:{}, unsupported:new Set(),
               lastSet:null, silenceUntil:0, jobRunning:false, externalChange:null };
 
-function latClass(d){ return d==null?'bad': d<150?'good': d<400?'warn':'bad'; }
-function latColor(d){ return d==null?'var(--muted)': d<150?'var(--good)': d<400?'var(--warn)':'var(--bad)'; }
+function latColor(d){ return d==null?'var(--muted)': d<150?VIZ_GOOD: d<400?VIZ_WARN:VIZ_BAD; }
 
 window.togglePick = (enc, on) => {
   const name = decodeURIComponent(enc);
@@ -2320,7 +2466,6 @@ function renderNodes(){
   if ($('regionGrid')) {
     $('regionGrid').innerHTML = groups.map(g => {
       const open = NODES.expanded.has(g.region);
-      const bestCls = latClass(g.best);
       const ratio = g.total ? (g.ok/g.total*100) : 0;
       return `<div class="card" style="padding:0;overflow:hidden">
         <div style="padding:14px 16px;cursor:pointer" onclick="toggleRegion('${g.region}')">
@@ -2329,12 +2474,12 @@ function renderNodes(){
             <span class="pill">${g.total} 个</span>
           </div>
           <div style="display:flex;align-items:baseline;gap:9px">
-            <span class="kpi ${bestCls}">${g.best!=null?g.best:'—'}</span>
+            <span class="kpi" style="color:${latColor(g.best)}">${g.best!=null?g.best:'—'}</span>
             <span class="kpi-label" style="margin:0">ms 最快</span>
             ${g.avg!=null?`<span class="muted" style="font-size:11px;margin-left:auto">平均 ${g.avg}ms</span>`:''}
           </div>
           <div class="bar" style="margin-top:9px">
-            <i style="width:${ratio.toFixed(0)}%;background:${ratio>70?'var(--good)':ratio>30?'var(--warn)':'var(--bad)'}"></i>
+            <i style="width:${ratio.toFixed(0)}%;background:${ratio>70?VIZ_GOOD:ratio>30?VIZ_WARN:VIZ_BAD}"></i>
           </div>
           <div class="kpi-label">${g.ok} 可用${g.fail?` · <span class="bad">${g.fail} 失败</span>`:''}${g.untested?` · ${g.untested} 未测`:''}</div>
         </div>
@@ -2357,8 +2502,8 @@ function renderNodes(){
               </span>
               ${badge}
               <span class="mono lat" style="color:${latColor(d)}">${d!=null?d+'ms':'—'}</span>
-              <button style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();switchNode('${encodeURIComponent(n.name)}')" ${isCur?'disabled':''}>切换</button>
-              <button style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();checkIp('${encodeURIComponent(n.name)}')">IP</button>
+              <button class="xs" onclick="event.stopPropagation();switchNode('${encodeURIComponent(n.name)}')" ${isCur?'disabled':''}>切换</button>
+              <button class="xs" onclick="event.stopPropagation();checkIp('${encodeURIComponent(n.name)}')">IP</button>
             </div>`;
           }).join('')}
         </div>
@@ -2414,7 +2559,7 @@ function renderKernelWarn(){
   const {from, to} = NODES.externalChange;
   el.innerHTML = `<span class="warn">⚠ 内核节点选择被外部修改：${short(from)} → ${short(to)}</span>
     <span class="muted">（非本仪表盘操作。VPN 客户端界面不会同步此改动，它下次切换或重连时会用旧选择覆盖内核。）</span>
-    <button style="padding:2px 8px;font-size:11px" onclick="dismissKernelWarn()">知道了</button>`;
+    <button class="xs" onclick="dismissKernelWarn()">知道了</button>`;
   el.style.display = '';
 }
 window.dismissKernelWarn = () => { NODES.externalChange = null; renderKernelWarn(); };
@@ -2545,7 +2690,84 @@ async function loadNodeChecks(){
   } catch(e) { NODES.checks = {}; }
 }
 
+// ==================== 定制下拉组件 (原生弹层样式不可控，彻底自绘) ====================
+function closeAllDd(){
+  document.querySelectorAll('.dd-menu.open').forEach(m => {
+    m.classList.remove('open');
+    if (m.parentNode === document.body && m._home) m._home.appendChild(m);
+  });
+  document.querySelectorAll('.dd-btn.open').forEach(b => b.classList.remove('open'));
+}
+
+function enhanceSelects(){
+  document.querySelectorAll('select').forEach(sel => {
+    if (sel.dataset.enhanced) return;
+    sel.dataset.enhanced = '1';
+    const wrap = document.createElement('div');
+    wrap.className = 'dd-wrap' + (sel.classList.contains('sm') ? ' sm' : '');
+    sel.parentNode.insertBefore(wrap, sel);
+    wrap.appendChild(sel);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'dd-btn';
+    btn.innerHTML = '<span class="dd-label"></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    wrap.appendChild(btn);
+
+    const menu = document.createElement('div');
+    menu.className = 'dd-menu';
+    const items = [...sel.options].map((o, i) => {
+      const it = document.createElement('div');
+      it.className = 'dd-item';
+      it.textContent = o.text;
+      it.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sel.selectedIndex = i;
+        sel.dispatchEvent(new Event('change', {bubbles: true}));
+        closeAllDd();
+      });
+      menu.appendChild(it);
+      return it;
+    });
+    wrap.appendChild(menu);
+    menu._home = wrap;
+
+    const sync = () => {
+      const cur = sel.options[sel.selectedIndex];
+      btn.querySelector('.dd-label').textContent = cur ? cur.text : '';
+      items.forEach((it, i) => it.classList.toggle('sel', i === sel.selectedIndex));
+    };
+    sync();
+    sel.addEventListener('change', sync);
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasOpen = menu.classList.contains('open');
+      closeAllDd();
+      if (wasOpen || sel.disabled) return;
+      sync();
+      // 浮层挂到 body 下 fixed 定位，卡片 overflow:hidden 也裁不到
+      document.body.appendChild(menu);
+      const r = btn.getBoundingClientRect();
+      menu.style.left = r.left + 'px';
+      menu.style.width = Math.max(r.width, 140) + 'px';
+      const spaceBelow = window.innerHeight - r.bottom - 8;
+      const mh = Math.min(260, Math.max(90, spaceBelow));
+      menu.style.maxHeight = mh + 'px';
+      menu.style.top = (spaceBelow > 110 ? r.bottom + 4 : Math.max(8, r.top - mh - 4)) + 'px';
+      menu.classList.add('open');
+      btn.classList.add('open');
+    });
+  });
+}
+
+document.addEventListener('click', (e) => { if (!e.target.closest('.dd-wrap')) closeAllDd(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllDd(); });
+window.addEventListener('scroll', closeAllDd, true);
+window.addEventListener('resize', closeAllDd);
+
 // ==================== 页面启动 ====================
+enhanceSelects();
 switchTab('assets');
 loadProviders();
 setInterval(() => {
