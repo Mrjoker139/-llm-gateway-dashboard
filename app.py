@@ -197,6 +197,21 @@ def api_status():
     )
 
 
+@app.get("/api/node/selected")
+def api_node_selected():
+    """内核当前选择 — 轻量轮询接口. 前端几秒对一次, 发现外部改动就提醒用户."""
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            proxies = client.get(f"{kernel_api()}/proxies").json()["proxies"]
+        groups = {k: v for k, v in proxies.items() if v.get("type") == "Selector"}
+        if not groups:
+            return jsonify({"ok": False, "error": "未找到策略组"}), 502
+        name, selector = max(groups.items(), key=lambda kv: len(kv[1].get("all", [])))
+        return jsonify({"ok": True, "selector": name, "current": selector.get("now")})
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": str(exc)}), 502
+
+
 @app.get("/api/delay_one")
 def api_delay_one():
     node = request.args.get("node", "")
@@ -819,6 +834,36 @@ def api_provider_balance(pid: str):
         return jsonify({"ok": False, "error": "unknown provider"}), 404
     info = p.fetch_balance()
     return jsonify({"ok": True, **info.__dict__})
+
+
+@app.post("/api/balances/all")
+def api_balances_all():
+    """并发查询所有已配置厂商的资金余额与套餐额度."""
+    results = {}
+
+    def _fetch(pid, prov):
+        try:
+            info = prov.fetch_balance()
+            d = info.__dict__.copy()
+            d["name"] = prov.name
+            d["enabled"] = getattr(prov, "enabled", True)
+            return pid, d
+        except Exception as exc:  # noqa: BLE001
+            from providers import BalanceInfo
+            info = BalanceInfo(pid, "balance", available=False, error=str(exc))
+            d = info.__dict__.copy()
+            d["name"] = prov.name
+            d["enabled"] = getattr(prov, "enabled", True)
+            return pid, d
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs = [ex.submit(_fetch, pid, p) for pid, p in PROVIDERS.items() if p.configured]
+        for fut in futs:
+            pid, data = fut.result()
+            results[pid] = data
+
+    return jsonify({"ok": True, "balances": results})
+
 
 
 @app.post("/api/providers/<pid>/models")

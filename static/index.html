@@ -5,194 +5,884 @@
 <title>LLM 网关仪表盘</title>
 <style>
   :root {
-    --bg:#0d1014; --card:#161a21; --card2:#1c2129; --border:#252b35;
-    --text:#e7eaf0; --muted:#8a93a6; --good:#34c17b; --warn:#e0a33e;
-    --bad:#e0574f; --accent:#4c8dff; --purple:#9a6cff;
+    --bg: #090b10;
+    --bg-gradient: radial-gradient(1200px 600px at 50% -40px, rgba(30, 41, 59, 0.4) 0%, transparent 70%),
+                   radial-gradient(900px 500px at 85% 180px, rgba(15, 23, 42, 0.5) 0%, transparent 60%);
+    --card: #10131a;
+    --card-surface: #141824;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-light: rgba(255, 255, 255, 0.15);
+    --border-hover: rgba(255, 255, 255, 0.25);
+    --text: #f8fafc;
+    --text-sec: #cbd5e1;
+    --muted: #94a3b8;
+
+    /* 优雅非刺眼的高阶暗色色彩 */
+    --good: #38b284;
+    --good-light: rgba(56, 178, 132, 0.14);
+    --good-border: rgba(56, 178, 132, 0.35);
+    --warn: #d97706;
+    --warn-light: rgba(217, 119, 6, 0.14);
+    --warn-border: rgba(217, 119, 6, 0.35);
+    --bad: #e11d48;
+    --bad-light: rgba(225, 29, 72, 0.14);
+    --bad-border: rgba(225, 29, 72, 0.35);
+
+    --accent: #94a3b8;
   }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);
-       font:14px/1.5 "Segoe UI","Microsoft YaHei",sans-serif}
-  header{padding:16px 26px;border-bottom:1px solid var(--border);
-         display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-  h1{font-size:16px;margin:0;font-weight:600}
-  .sub{color:var(--muted);font-size:12px}
-  .gw{background:var(--card2);border:1px solid var(--border);border-radius:6px;
-      padding:4px 10px;font-family:Consolas,monospace;font-size:12px;color:var(--accent);cursor:pointer}
-  main{padding:20px 26px 50px}
-  .sec{margin-bottom:26px}
-  .sec-title{font-size:13px;color:var(--muted);text-transform:uppercase;
-             letter-spacing:.6px;margin:0 0 12px;font-weight:600}
 
-  /* 卡片网格 — 仪表盘的核心布局 */
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px}
-  /* 节点列表比普通卡片需要更宽 (要放下勾选框 + 名字 + 标记 + 按钮) */
-  #regionGrid{grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:15px 17px;
-        transition:border-color .15s}
-  .card:hover{border-color:#333b48}
-  .card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
-  .card-t{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0}
-  .dot.on{background:var(--good);box-shadow:0 0 7px var(--good)}
-  .dot.off{background:#3a4150}
-  .kpi{font-size:23px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
-  .kpi.sm{font-size:17px}
-  .kpi-label{color:var(--muted);font-size:11px;margin-top:3px}
-  .card-row{display:flex;justify-content:space-between;gap:12px;margin-top:11px;
-            padding-top:11px;border-top:1px solid var(--border)}
-  .card-row > div{flex:1}
-  .bar{height:5px;background:#232935;border-radius:3px;overflow:hidden;margin-top:7px}
-  .bar > i{display:block;height:100%;border-radius:3px;transition:width .3s}
+  * { box-sizing: border-box; }
 
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
-  th{color:var(--muted);font-weight:500;font-size:12px}
-  tbody tr:hover{background:rgba(255,255,255,.02)}
-  .mono{font-family:Consolas,monospace;font-size:12px}
-  .muted{color:var(--muted)}
-  .good{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)}
 
-  .toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:13px}
-  select,button,input{background:var(--card2);color:var(--text);border:1px solid var(--border);
-                      border-radius:6px;padding:6px 11px;font-size:13px;cursor:pointer}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-  button.danger{border-color:var(--bad);color:var(--bad);background:rgba(255,107,107,.1)}
-  button.danger:hover{background:rgba(255,107,107,.2)}
-  button.sm{padding:2px 8px;font-size:11px;border-radius:4px}
-  button:disabled{opacity:.35;cursor:not-allowed;pointer-events:none;filter:grayscale(0.7)}
-  .pill{padding:1px 7px;border-radius:9px;font-size:11px;border:1px solid var(--border);color:var(--muted)}
-  .toast{position:fixed;right:20px;bottom:20px;background:var(--card);
-         border:1px solid var(--border);border-left:3px solid var(--accent);
-         padding:12px 16px;border-radius:8px;max-width:480px;display:none;
-         white-space:pre-wrap;font-size:13px;z-index:99}
-  .chart{display:flex;align-items:flex-end;gap:2px;height:76px;margin-top:10px}
-  .chart > div{flex:1;background:linear-gradient(to top,var(--accent),var(--purple));
-               border-radius:2px 2px 0 0;min-height:1px}
-  .empty{color:var(--muted);font-size:13px;padding:18px 0;text-align:center}
-  .tabs{display:flex;gap:2px;margin-bottom:20px;border-bottom:1px solid var(--border)}
-  .tabs button{border:none;background:none;border-bottom:2px solid transparent;border-radius:0;
-               padding:9px 15px;color:var(--muted)}
-  .tabs button.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
-  .panel{display:none} .panel.active{display:block}
-  .prog{height:4px;background:var(--card2);border-radius:2px;overflow:hidden;margin:10px 0}
-  .prog > i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 
-  /* 模型性能表 — 分组表头 + 统一对齐与分组边框 */
-  .ptable th, .ptable td{padding:7px 8px;white-space:nowrap;vertical-align:middle}
-  .ptable thead tr:first-child th{font-size:11px;text-align:center;letter-spacing:.3px;
-    color:var(--text);border-bottom:1px solid var(--border)}
-  .ptable thead tr:last-child th{font-size:11px;color:var(--muted);text-align:right;
-    padding-top:3px;padding-bottom:7px}
-  .ptable thead tr:last-child th.grp{font-weight:600}
-  .ptable td.num{text-align:right;font-family:Consolas,monospace;font-size:12px;
-    font-variant-numeric:tabular-nums;min-width:44px}
-  .ptable tbody tr.main:hover{background:rgba(255,255,255,.03)}
-  /* 每个指标组的分组背景色与边框对齐线 (表头到数据行贯通) */
-  .ptable .g-ttft{background:rgba(224,163,62,.09)}
-  .ptable .g-dur{background:rgba(76,141,255,.09)}
-  .ptable .g-tps{background:rgba(154,108,255,.09)}
-  .ptable .grp-start{border-left:1px solid var(--border) !important}
-  .ptable .grp-end{border-right:1px solid var(--border) !important}
-  .cellbar{height:3px;border-radius:2px;margin-top:3px;opacity:.75}
-  .mrow{cursor:pointer}
-  .expander{display:inline-block;width:11px;color:var(--muted);font-size:10px}
+  body {
+    margin: 0;
+    background-color: var(--bg);
+    background-image: var(--bg-gradient);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-  /* 状态徽标: 明确区分"禁用"和"不稳" */
-  .pill.bad-pill{border-color:var(--bad);color:var(--bad)}
-  .pill.warn-pill{border-color:var(--warn);color:var(--warn)}
-  .pill.good-pill{border-color:var(--good);color:var(--good)}
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(9, 11, 16, 0.85);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    padding: 12px 30px;
+    min-height: 60px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    contain: layout style;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  h1 {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .gw-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 11px;
+    font-size: 12px;
+    color: var(--text-sec);
+  }
+  .gw {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    color: var(--text);
+    cursor: pointer;
+    background: none;
+    padding: 0;
+    border: none;
+    font-weight: 550;
+    transition: opacity 0.15s ease;
+    opacity: 0.9;
+  }
+  .gw:hover { opacity: 1; text-decoration: underline; }
 
-  /* 节点行: 标记单独占一列, 不跟名字抢空间 (之前用 flex:1 会被挤没) */
-  .noderow{display:grid;grid-template-columns:16px minmax(0,1fr) auto 54px auto auto;
-           align-items:center;gap:8px;padding:7px 16px;font-size:12px;
-           border-bottom:1px solid #1b1f27}
-  .noderow input[type=checkbox]{margin:0;cursor:pointer}
-  .noderow .nodename{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  .noderow .lat{text-align:right}
-  /* 没有检测标记时留一个窄占位, 避免各行名字宽度不一致 */
-  .noderow .badge-slot{display:flex;justify-content:flex-end}
-  .noderow .badge-slot:empty{display:none}
+  main { max-width: 1560px; margin: 0 auto; padding: 24px 30px 60px; }
+  .sec { margin-bottom: 30px; }
+  .sec-title {
+    font-size: 13px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin: 0 0 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sec-title svg {
+    color: var(--muted);
+    flex-shrink: 0;
+    opacity: 0.85;
+  }
 
-  /* 滚动条: 深色细条, 和整体风格一致 (默认滚动条太亮太宽) */
-  *{scrollbar-width:thin;scrollbar-color:#2f3743 transparent}
-  ::-webkit-scrollbar{width:9px;height:9px}
-  ::-webkit-scrollbar-track{background:transparent}
-  ::-webkit-scrollbar-thumb{background:#2f3743;border-radius:5px;
-    border:2px solid var(--card);background-clip:padding-box}
-  ::-webkit-scrollbar-thumb:hover{background:#3d4756;background-clip:padding-box}
-  ::-webkit-scrollbar-corner{background:transparent}
+  /* Grid 布局: align-items: start 保证各自高度独立，不被兄弟卡片拉扯 */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(295px, 1fr));
+    gap: 18px;
+    align-items: start;
+  }
+  #regionGrid {
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    align-items: start;
+  }
+  #availGroups {
+    align-items: start !important;
+  }
 
-  /* 配额表: 让进度条和数字对齐得好一点 */
-  .qtable th,.qtable td{padding:7px 10px}
-  .qtable tbody tr:hover{background:rgba(255,255,255,.03)}
-  .qtable tr.picked{background:rgba(76,141,255,.07)}
+  /* ==================== 顶级亚克力毛玻璃卡片 (零模糊防抖动 + 大气全局漫射) ==================== */
+  .card {
+    background: linear-gradient(145deg, rgba(22, 27, 38, 0.72) 0%, rgba(12, 15, 23, 0.85) 100%);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 19px 22px;
+    box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.62),
+                0 4px 12px -2px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.12),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+    position: relative;
+    overflow: hidden;
+    /* 彻底杜绝 transform 引起的文字模糊与子像素抖动 */
+    transition: box-shadow 0.22s ease, border-color 0.22s ease, background 0.22s ease;
+  }
+  .card:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 18px 42px -4px rgba(0, 0, 0, 0.75),
+                0 6px 16px -2px rgba(0, 0, 0, 0.45),
+                inset 0 1px 0 rgba(255, 255, 255, 0.22),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  }
 
-  /* 拥堵分析: 每小时一根柱子 */
-  .heat{display:flex;gap:2px;align-items:flex-end;height:38px;margin-top:6px}
-  .heat > div{flex:1;border-radius:2px 2px 0 0;min-height:2px;position:relative}
+  /* 卡片边缘渐变彩条 (Edge Gradient Rim) - 还原并升级最初广受好评的细腻渐变光边 */
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(56, 178, 132, 0.38) 0%, rgba(59, 130, 246, 0.28) 40%, rgba(168, 85, 247, 0.22) 75%, rgba(255, 255, 255, 0.06) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0.85;
+    transition: opacity 0.25s ease, background 0.25s ease;
+  }
+  .card:hover::before {
+    opacity: 1;
+    background: linear-gradient(135deg, rgba(56, 178, 132, 0.55) 0%, rgba(59, 130, 246, 0.42) 40%, rgba(168, 85, 247, 0.35) 75%, rgba(255, 255, 255, 0.14) 100%);
+  }
 
-  /* 可用模型: 按厂商折叠的卡片 */
-  .avail-card{padding:0;overflow:hidden}
-  .avail-head{padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:9px;
-              justify-content:space-between;user-select:none}
-  .avail-head:hover{background:rgba(255,255,255,.02)}
-  .avail-name{display:flex;align-items:center;gap:8px;font-weight:600}
-  .avail-body{display:none;border-top:1px solid var(--border);max-height:300px;overflow-y:auto}
-  .avail-body.open{display:block}
-  .avail-model{display:flex;align-items:center;justify-content:space-between;gap:8px;
-               padding:7px 16px;font-size:12px;border-bottom:1px solid #1b1f27;cursor:pointer}
-  .avail-model:hover{background:rgba(255,255,255,.03)}
-  .avail-model .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .avail-copy{opacity:0;color:var(--accent);font-size:11px;flex-shrink:0}
-  .avail-model:hover .avail-copy{opacity:1}
+  /* 卡片大气全局晕染漫射: 彻底放开范围 (800px+ 极宽漫射)，绝不缩在角落像污渍 */
+  .card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(850px 380px at 75% -15%, rgba(56, 178, 132, 0.09) 0%, rgba(59, 130, 246, 0.045) 45%, transparent 75%);
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .card:hover::after {
+    background: radial-gradient(950px 420px at 75% -15%, rgba(56, 178, 132, 0.13) 0%, rgba(59, 130, 246, 0.065) 50%, transparent 80%);
+  }
 
-  /* 厂商启用/关闭开关 (厂商配置页) */
-  .switch{position:relative;display:inline-block;width:38px;height:20px;flex-shrink:0;vertical-align:middle}
-  .switch input{position:absolute;opacity:0;width:0;height:0;margin:0;padding:0;border:none;pointer-events:none}
-  .switch .slider{position:absolute;inset:0;background:#2b323d;border:1px solid #3d4656;border-radius:20px;
-                 cursor:pointer;transition:all .2s ease}
-  .switch .slider:before{content:"";position:absolute;width:14px;height:14px;left:2px;top:2px;
-                         background:#8a93a6;border-radius:50%;transition:all .2s ease}
-  .switch input:checked + .slider{background:var(--good);border-color:var(--good)}
-  .switch input:checked + .slider:before{transform:translateX(18px);background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.5)}
-  .switch:hover .slider{border-color:#5a667a}
-  .switch input:checked + .slider:hover{background:#2eb16f}
-  .card.disabled-card{opacity:.55;background:#12151b}
-  .card.disabled-card .dot.off{background:var(--border)}
-  .switch-text{font-size:11px;font-weight:600;min-width:34px;user-select:none}
+  /* 资产钱包卡 (DeepSeek 等) 宽幅翡翠-青蓝大气漫射 */
+  .wallet-card::before {
+    background: linear-gradient(135deg, rgba(56, 178, 132, 0.52) 0%, rgba(56, 189, 248, 0.32) 48%, rgba(255, 255, 255, 0.06) 100%);
+  }
+  .wallet-card::after {
+    background: radial-gradient(850px 380px at 75% -15%, rgba(56, 178, 132, 0.12) 0%, rgba(56, 189, 248, 0.055) 45%, transparent 75%);
+  }
+
+  /* 订阅套餐卡 (Kimi 等) 宽幅靛青-薄荷大气漫射 */
+  .plan-card::before {
+    background: linear-gradient(135deg, rgba(129, 140, 248, 0.48) 0%, rgba(56, 178, 132, 0.32) 50%, rgba(255, 255, 255, 0.06) 100%);
+  }
+  .plan-card::after {
+    background: radial-gradient(850px 380px at 75% -15%, rgba(129, 140, 248, 0.12) 0%, rgba(56, 178, 132, 0.055) 45%, transparent 75%);
+  }
+
+  /* 高代际配额工作台卡 宽幅星空蓝紫大气漫射 */
+  .quota-studio-card::before {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.42) 0%, rgba(168, 85, 247, 0.28) 45%, rgba(56, 178, 132, 0.22) 85%, rgba(255, 255, 255, 0.06) 100%);
+  }
+  .quota-studio-card::after {
+    background: radial-gradient(1100px 450px at 50% -20%, rgba(59, 130, 246, 0.1) 0%, rgba(168, 85, 247, 0.055) 45%, transparent 80%);
+  }
+
+  .card-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .card-t { font-size: 15.5px; font-weight: 650; display: flex; align-items: center; gap: 9px; letter-spacing: -0.015em; }
+
+  /* 状态指示点: 柔和微光环, 杜绝扎眼荧光 */
+  .dot { width: 7.5px; height: 7.5px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.on { background: #38b284; box-shadow: 0 0 0 2.5px rgba(56, 178, 132, 0.22); }
+  .dot.off { background: #333946; }
+
+  .kpi { font-size: 28px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.2; letter-spacing: -0.03em; }
+  .kpi.sm { font-size: 20px; }
+  .kpi-label { color: var(--muted); font-size: 12.5px; margin-top: 4px; font-weight: 500; }
+  .card-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .card-row > div { flex: 1; }
+
+  .bar { height: 5px; background: rgba(255, 255, 255, 0.07); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; border-radius: 3px; transition: width 0.3s; opacity: 0.9; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 650; font-size: 12.5px; }
+  tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  .muted { color: var(--muted); }
+  .sub { color: var(--text-sec); font-size: 13px; }
+  .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+
+  /* ==================== 统一高级毛玻璃按钮设计系统 (统一步调、加粗加大、杜绝错位) ==================== */
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 650;
+    padding: 8px 18px;
+    min-height: 38px;
+    border-radius: 9px;
+    cursor: pointer;
+    user-select: none;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 100%);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-top: 1px solid rgba(255, 255, 255, 0.28);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+    color: #e2e8f0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    /* 移除 transform: translateY 杜绝右上角按钮悬停时下方按钮跟随晃动/重排 */
+    transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+  }
+  button:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%);
+    border-color: rgba(255, 255, 255, 0.22);
+    border-top-color: rgba(255, 255, 255, 0.48);
+    color: #ffffff;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  button:active {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* 主要按钮 (Primary): 高密度透光晶体玻璃，与次级按钮材质深度统一，绝不突兀 */
+  button.primary {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-top: 1px solid rgba(255, 255, 255, 0.58);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    color: #ffffff;
+    font-weight: 700;
+  }
+  button.primary:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.13) 100%);
+    border-color: rgba(255, 255, 255, 0.36);
+    border-top-color: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+
+  button.danger {
+    background: linear-gradient(180deg, rgba(225, 29, 72, 0.18) 0%, rgba(225, 29, 72, 0.08) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(225, 29, 72, 0.3);
+    border-top: 1px solid rgba(225, 29, 72, 0.55);
+    color: #fda4af;
+    box-shadow: 0 4px 14px rgba(225, 29, 72, 0.2);
+  }
+  button.danger:hover {
+    background: linear-gradient(180deg, rgba(225, 29, 72, 0.28) 0%, rgba(225, 29, 72, 0.14) 100%);
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(225, 29, 72, 0.35);
+  }
+
+  /* 小尺寸按钮: 紧凑但保持足够触控高度与清晰字阶 */
+  button.sm {
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 650;
+    min-height: 32px;
+    border-radius: 8px;
+  }
+  button:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+
+  /* ==================== 文本输入与复选框彻底解耦 (消除复选框悬浮形变抖动) ==================== */
+  /* 全局所有文本输入与下拉选框: 100% 统一高质感暗黑微透毛玻璃风格，彻底杜绝白框 */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select {
+    width: 100%;
+    box-sizing: border-box !important;
+    background: rgba(255, 255, 255, 0.035) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 8px !important;
+    padding: 8px 12px !important;
+    color: #f8fafc !important;
+    font-family: inherit !important;
+    font-size: 13.5px !important;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+    outline: none !important;
+    transition: all 0.15s ease !important;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):hover,
+  select:hover {
+    border-color: rgba(255, 255, 255, 0.22) !important;
+    background: rgba(255, 255, 255, 0.055) !important;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):focus,
+  select:focus {
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12), inset 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    background: rgba(255, 255, 255, 0.065) !important;
+    color: #ffffff !important;
+  }
+  input:not([type="checkbox"]):not([type="radio"])::placeholder {
+    color: #64748b !important;
+    opacity: 1 !important;
+  }
+
+  /* 复选框专用高质感现代规范: 绝对稳固，零抖动，零尺寸形变 */
+  input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    vertical-align: middle;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1.5px solid rgba(255, 255, 255, 0.24);
+    border-radius: 4.5px;
+    cursor: pointer;
+    display: inline-grid;
+    place-content: center;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+    transform: none !important;
+    padding: 0 !important;
+    flex-shrink: 0;
+  }
+  input[type="checkbox"]::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    transform: scale(0);
+    transition: transform 0.12s ease-in-out;
+    box-shadow: inset 1em 1em #38b284;
+    transform-origin: center;
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  }
+  input[type="checkbox"]:checked {
+    background: rgba(56, 178, 132, 0.2);
+    border-color: #38b284;
+  }
+  input[type="checkbox"]:checked::before {
+    transform: scale(1);
+  }
+  input[type="checkbox"]:hover {
+    border-color: rgba(255, 255, 255, 0.45);
+    transform: none !important;
+  }
+  input[type="checkbox"]:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(56, 178, 132, 0.25) !important;
+  }
+  input[type="checkbox"]:active {
+    transform: none !important;
+  }
+
+  label.sub {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+    color: #cbd5e1;
+  }
+
+  /* 统一规范的徽标 Pill: 绝不出现扎眼的孤立白框 */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3.5px 10px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 550;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-sec);
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .toast {
+    position: fixed; right: 24px; bottom: 24px;
+    background: rgba(16, 19, 28, 0.94);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border-light);
+    border-left: 3px solid rgba(255, 255, 255, 0.6);
+    padding: 14px 20px; border-radius: 11px; max-width: 480px; display: none;
+    white-space: pre-wrap; font-size: 13.5px; z-index: 999; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+  }
+
+  .chart { display: flex; align-items: flex-end; gap: 3px; height: 85px; margin-top: 14px; }
+  .chart > div { flex: 1; background: linear-gradient(to top, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.06)); border-radius: 2px 2px 0 0; min-height: 2px; }
+  .empty { color: var(--muted); font-size: 13.5px; padding: 26px 0; text-align: center; }
+
+  /* 现代 Segmented Control Tab 栏: 毛玻璃微胶囊 */
+  .nav-tabs {
+    display: inline-flex;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    padding: 4px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    gap: 4px;
+    margin-bottom: 24px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+  .nav-tabs button {
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 8px 18px;
+    font-size: 13.5px;
+    font-weight: 550;
+    color: var(--muted);
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    min-height: 36px;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .nav-tabs button:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+  .nav-tabs button.active {
+    color: #ffffff;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-top: 1px solid rgba(255, 255, 255, 0.32);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    font-weight: 650;
+  }
+  .nav-tabs button svg { opacity: 0.7; }
+  .nav-tabs button.active svg { opacity: 1; color: #f8fafc; }
+
+  .panel { display: none; }
+  .panel.active { display: block; animation: fadeIn 0.18s ease-in-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .prog { height: 4px; background: rgba(255, 255, 255, 0.06); border-radius: 2px; overflow: hidden; margin: 12px 0; }
+  .prog > i { display: block; height: 100%; width: 0; background: rgba(255, 255, 255, 0.45); transition: width 0.25s; }
+
+  /* 模型性能表 — 分组表头 */
+  .ptable th, .ptable td { padding: 10px 14px; white-space: nowrap; vertical-align: middle; }
+  .ptable thead tr:first-child th { font-size: 12px; text-align: center; letter-spacing: 0.3px; color: var(--text); border-bottom: 1px solid var(--border); }
+  .ptable thead tr:last-child th { font-size: 11.5px; color: var(--muted); text-align: right; padding-top: 4px; padding-bottom: 8px; }
+  .ptable thead tr:last-child th.grp { font-weight: 650; }
+  .ptable td.num { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-variant-numeric: tabular-nums; min-width: 46px; }
+  .ptable tbody tr.main:hover { background: rgba(255, 255, 255, 0.035); }
+  .ptable .g-ttft { background: rgba(217, 119, 6, 0.04); }
+  .ptable .g-dur { background: rgba(255, 255, 255, 0.03); }
+  .ptable .g-tps { background: rgba(56, 178, 132, 0.04); }
+  .ptable .grp-start { border-left: 1px solid var(--border) !important; }
+  .ptable .grp-end { border-right: 1px solid var(--border) !important; }
+  .cellbar { height: 3.5px; border-radius: 2px; margin-top: 3px; opacity: 0.75; }
+  .mrow { cursor: pointer; }
+  .expander { display: inline-block; width: 12px; color: var(--muted); font-size: 11px; }
+
+  /* 状态徽标 */
+  .pill.bad-pill { border-color: var(--bad-border); color: #fda4af; background: var(--bad-light); }
+  .pill.warn-pill { border-color: var(--warn-border); color: #fde68a; background: var(--warn-light); }
+  .pill.good-pill { border-color: var(--good-border); color: #6ee7b7; background: var(--good-light); }
+
+  /* 节点行 */
+  .noderow { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto 58px auto auto; align-items: center; gap: 10px; padding: 10px 18px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .noderow .nodename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-weight: 500; }
+  .noderow .lat { text-align: right; }
+  .noderow .badge-slot { display: flex; justify-content: flex-end; }
+  .noderow .badge-slot:empty { display: none; }
+
+  /* 细深色滚动条 */
+  * { scrollbar-width: thin; scrollbar-color: #272e3b transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #232936; border-radius: 4px; border: 2px solid var(--bg); background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #353e52; }
+
+  /* 配额表与防抖动锁定高度 */
+  .qtable-wrapper {
+    min-height: 440px;
+    max-height: 660px;
+    overflow-y: auto;
+    position: relative;
+    border-radius: 14px;
+  }
+  .qtable th, .qtable td { padding: 12px 16px; }
+  .qtable tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+  .qtable tr.picked { background: rgba(255, 255, 255, 0.06); }
+
+  /* 拥堵柱图 */
+  .heat { display: flex; gap: 2.5px; align-items: flex-end; height: 46px; margin-top: 10px; }
+  .heat > div { flex: 1; border-radius: 2px 2px 0 0; min-height: 2px; position: relative; }
+
+  /* 可用模型折叠卡片: 默认自适应自身高度, 绝不拉伸临近卡片 */
+  .avail-card {
+    padding: 0;
+    overflow: hidden;
+    align-self: start;
+    height: auto;
+  }
+  .avail-head { padding: 14px 18px; cursor: pointer; display: flex; align-items: center; gap: 10px; justify-content: space-between; user-select: none; }
+  .avail-head:hover { background: rgba(255, 255, 255, 0.025); }
+  .avail-name { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 14.5px; }
+  .avail-body { display: none; border-top: 1px solid var(--border); max-height: 340px; overflow-y: auto; }
+  .avail-body.open { display: block; }
+  .avail-model { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 8px 18px; font-size: 13px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .avail-model:hover { background: rgba(255, 255, 255, 0.035); }
+  .avail-model .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .avail-copy { opacity: 0; color: var(--text); font-size: 12px; flex-shrink: 0; }
+  .avail-model:hover .avail-copy { opacity: 1; }
+
+  /* 厂商启用/关闭开关 */
+  .switch { position: relative; display: inline-block; width: 38px; height: 21px; flex-shrink: 0; vertical-align: middle; }
+  .switch input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; padding: 0; border: none; pointer-events: none; }
+  .switch .slider { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.09); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; transition: all 0.2s ease; }
+  .switch .slider:before { content: ""; position: absolute; width: 15px; height: 15px; left: 2px; top: 2px; background: #64748b; border-radius: 50%; transition: all 0.2s ease; }
+  .switch input:checked + .slider { background: rgba(56, 178, 132, 0.35); border-color: rgba(56, 178, 132, 0.6); }
+  .switch input:checked + .slider:before { transform: translateX(17px); background: #38b284; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+  .switch:hover .slider { border-color: var(--border-hover); }
+  .card.disabled-card { opacity: 0.52; background: #0c0e14; }
+  .card.disabled-card .dot.off { background: var(--border); }
+  .switch-text { font-size: 12px; font-weight: 550; min-width: 38px; user-select: none; }
 
   /* 配额筛选与代际标签 */
-  .chip-group{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
-  .chip{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;
-        font-size:11px;cursor:pointer;color:var(--muted);user-select:none;transition:all .15s ease}
-  .chip:hover{color:var(--text);border-color:var(--accent)}
-  .chip.active{background:rgba(76,141,255,.15);border-color:var(--accent);color:var(--accent);font-weight:600}
-  .gen-badge{display:inline-block;padding:0 5px;border-radius:4px;font-size:10px;font-weight:600;
-             background:rgba(255,255,255,.06);border:1px solid var(--border);margin-right:4px}
-  .gen-badge.claude{background:rgba(217,119,87,.15);border-color:rgba(217,119,87,.4);color:#e88d72}
-  .gen-badge.gpt{background:rgba(16,163,127,.15);border-color:rgba(16,163,127,.4);color:#2dd4bf}
-  .gen-badge.g38{background:rgba(154,108,255,.18);border-color:rgba(154,108,255,.4);color:#bb9af7}
-  .gen-badge.g37{background:rgba(76,141,255,.15);border-color:rgba(76,141,255,.4);color:#7aa2f7}
-  .gen-badge.g3{background:rgba(56,189,248,.12);border-color:rgba(56,189,248,.3);color:#38bdf8}
+  .chip-group { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+  .chip {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 12.5px;
+    font-weight: 550;
+    cursor: pointer;
+    color: var(--text-sec);
+    user-select: none;
+    transition: all 0.15s ease;
+  }
+  .chip:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.24); background: rgba(255, 255, 255, 0.06); }
+  .chip.active {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.28);
+    border-top-color: rgba(255, 255, 255, 0.45);
+    color: #ffffff;
+    font-weight: 650;
+  }
+
+  .gen-badge { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); margin-right: 4px; color: var(--text-sec); }
+  .gen-badge.claude { background: rgba(225, 29, 72, 0.09); border-color: rgba(225, 29, 72, 0.28); color: #fda4af; }
+  .gen-badge.gpt { background: rgba(56, 178, 132, 0.09); border-color: rgba(56, 178, 132, 0.28); color: #6ee7b7; }
+  .gen-badge.g38 { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.24); color: #f8fafc; }
+  .gen-badge.g37 { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.18); color: #cbd5e1; }
+  .gen-badge.g3 { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.14); color: #94a3b8; }
+
+  .balance-num {
+    font-size: 34px;
+    font-weight: 750;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: -0.035em;
+    margin: 12px 0 8px;
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+  .balance-num .curr {
+    font-size: 19px;
+    font-weight: 550;
+    color: var(--muted);
+  }
+  .balance-meta {
+    font-size: 13px;
+    color: var(--text-sec);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 12px;
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* 订阅套餐卡片内嵌时间窗槽位 */
+  .plan-window {
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.18) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 13px 15px;
+    margin-top: 11px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+    transition: all 0.2s ease;
+  }
+  .plan-window:hover {
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.24) 100%);
+    border-color: rgba(255, 255, 255, 0.13);
+  }
+
+  /* 搜索框专用视觉封装 */
+  .quota-filter-toolbar {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .search-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 260px;
+    max-width: 420px;
+  }
+  .search-input-wrap .search-icon {
+    position: absolute;
+    left: 12px;
+    font-size: 14px;
+    color: var(--muted);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .search-input-wrap input {
+    width: 100% !important;
+    padding: 8px 36px 8px 36px !important;
+    font-size: 13.5px !important;
+    height: 38px !important;
+  }
+  button.search-clear-btn {
+    position: absolute !important;
+    right: 9px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 22px !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    max-height: 22px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    color: #ffffff !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    display: none;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    z-index: 10 !important;
+    transition: all 0.15s ease !important;
+  }
+  button.search-clear-btn:hover {
+    background: rgba(255, 255, 255, 0.35) !important;
+    border-color: rgba(255, 255, 255, 0.45) !important;
+    color: #ffffff !important;
+    transform: translateY(-50%) scale(1.1) !important;
+  }
+
+  /* 独立图标按钮 (如单独刷新/删除) 规范: 彻底锁定方形尺寸，绝不溢出 */
+  button.icon-btn {
+    padding: 0 !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* 厂商接入表单与输入框 */
+  .provider-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-self: start;
+  }
+  .provider-card input {
+    width: 100%;
+  }
+  /* ==================== 终极压制 Chrome/Edge Autofill 浅白底色与浅色文字 Bug (放在样式最末尾最高优先级) ==================== */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active,
+  input[data-autocompleted] {
+    -webkit-box-shadow: 0 0 0 1000px #131722 inset !important;
+    box-shadow: 0 0 0 1000px #131722 inset !important;
+    -webkit-text-fill-color: #f8fafc !important;
+    color: #f8fafc !important;
+    caret-color: #f8fafc !important;
+    border-color: rgba(255, 255, 255, 0.28) !important;
+    transition: background-color 999999s ease-in-out 0s, color 999999s ease-in-out 0s !important;
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>LLM 网关仪表盘</h1>
-  <span class="sub">网关地址 <span class="gw" id="gwAddr">http://127.0.0.1:8787/v1</span> · 点击复制</span>
+  <div class="header-left">
+    <h1><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text);opacity:0.85"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg><span class="dot on"></span>LLM 网关控制台</h1>
+    <div class="gw-badge">
+      <span>接入地址</span>
+      <span class="gw" id="gwAddr" title="点击复制完整接入地址">http://127.0.0.1:8787/v1</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="primary sm" id="refreshCurrentTab"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 刷新当前页</button>
+  </div>
 </header>
 
 <main>
-<div class="tabs">
-  <button id="t-usage" class="active">用量总览</button>
-  <button id="t-models">模型性能</button>
-  <button id="t-avail">可用模型</button>
-  <button id="t-providers">厂商配置</button>
-  <button id="t-nodes">节点测速</button>
+<div class="nav-tabs">
+  <button id="t-assets" class="active"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg> 资产与配额</button>
+  <button id="t-observe"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> 观测与性能</button>
+  <button id="t-providers"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg> 厂商与模型</button>
+  <button id="t-network"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> 网络与节点</button>
 </div>
 
-<!-- ============ 用量总览 ============ -->
-<div class="panel active" id="p-usage">
+<!-- ============ 1. 资产与配额 (Assets & Quota) ============ -->
+<div class="panel active" id="p-assets">
+  <!-- 专区 A: 账户现金钱包 (按量充值扣费) -->
+  <div class="sec">
+    <div class="card-h" style="margin-bottom:12px">
+      <h2 class="sec-title" style="margin:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg> 账户资金钱包 · 按量付费</h2>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="sub" id="walletUpdated"></span>
+        <button class="primary sm" id="refreshAllBalances"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 刷新全部余额</button>
+      </div>
+    </div>
+    <div class="grid" id="walletGrid">
+      <div class="card empty">正在加载资产数据…</div>
+    </div>
+  </div>
+
+  <!-- 专区 B: 订阅套餐用量 (时间窗轮转机制) -->
+  <div class="sec">
+    <h2 class="sec-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> 订阅套餐用量 · 时间窗轮转</h2>
+    <div class="grid" id="planGrid">
+      <div class="card empty">正在加载套餐用量…</div>
+    </div>
+  </div>
+
+  <!-- 专区 C: 高代际模型配额 (Antigravity 订阅池) -->
+  <div class="sec">
+    <div class="card quota-studio-card" style="margin-bottom:14px">
+      <div class="card-h" style="margin-bottom:9px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="card-t" style="font-size:15px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Antigravity 订阅配额 · 高代际模型池</div>
+          <span class="pill good-pill" style="font-size:11px;padding:3px 9px">
+            <span class="dot on" style="width:6px;height:6px;display:inline-block;margin-right:5px"></span>OAuth 自动授权生效中 (免填 Key)
+          </span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="pill" id="quotaSummary">未加载</span>
+          <button class="primary sm" id="loadQuota">刷新配额</button>
+        </div>
+      </div>
+      <div class="sub" style="margin-bottom:14px;line-height:1.6">
+        复用 Antigravity 的 OAuth 凭据（Google Pro 会员直连，不走网关），已自动按<b>最新代际（Claude 4.6 / Gemini 3.8 / 3.7 / GPT）置顶排序</b>；测试结果将以
+        <span class="pill" >基准</span>
+        标记记录到「观测与性能」页。
+      </div>
+
+      <!-- 搜索筛选与代际切换区: 明确为过滤工具，杜绝地址/密钥混淆 -->
+      <div class="quota-filter-toolbar">
+        <div class="search-input-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="quotaSearch" name="dashboard_model_search_no_fill" placeholder="搜索模型名称或代际 (如 3.8, claude, gpt)..." autocomplete="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
+          <button id="clearQuotaSearch" class="search-clear-btn" style="display:none" title="清空搜索">×</button>
+        </div>
+        <div class="chip-group" id="quotaFamilyChips">
+          <span class="chip active" data-family="all">全部模型</span>
+          <span class="chip" data-family="claude">Claude (4.6)</span>
+          <span class="chip" data-family="gemini38">Gemini 3.8</span>
+          <span class="chip" data-family="gemini37">Gemini 3.7</span>
+          <span class="chip" data-family="gemini3">Gemini 3.x</span>
+          <span class="chip" data-family="gemini25">Gemini 2.5</span>
+          <span class="chip" data-family="gpt">GPT / 其他</span>
+        </div>
+      </div>
+
+      <div class="toolbar" style="margin-top:10px;margin-bottom:0;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05)">
+        <label class="sub"><input type="checkbox" id="onlyAvail" checked> 只看有配额</label>
+        <label class="sub"><input type="checkbox" id="onlyRec"> 只看推荐</label>
+        <span class="sub" style="opacity:0.4">|</span>
+        <label class="sub">排序:
+          <select id="quotaSortSel" style="padding:3px 8px;font-size:12px">
+            <option value="smart" selected>默认最新代际 (3.8 > 3.7 > 2.5)</option>
+            <option value="remaining_desc">剩余配额从高到低</option>
+            <option value="remaining_asc">剩余配额从低到高</option>
+            <option value="speed_desc">速度 TPS 从快到慢</option>
+            <option value="name_asc">按名称 A-Z</option>
+          </select>
+        </label>
+        <span class="sub" style="opacity:0.4">|</span>
+        <button id="benchSelected">测试勾选的模型</button>
+        <button id="benchTop">测试前 3 个推荐</button>
+        <span class="sub" id="benchProgress"></span>
+      </div>
+      <div class="prog"><i id="mbar"></i></div>
+    </div>
+
+    <!-- 表格容器: 锁定最小高度, 彻底消除空搜时的高度突变抖动 -->
+    <div class="card qtable-wrapper" style="padding:0">
+      <table class="qtable"><thead><tr>
+        <th style="width:36px"><input type="checkbox" id="qCheckAll" title="全选/全不选"></th>
+        <th style="text-align:left">模型名称 / 架构</th>
+        <th style="width:28%">5h 滚动剩余配额</th>
+        <th>重置倒计时 / 时间</th>
+        <th style="text-align:right">TTFT</th>
+        <th style="text-align:right">速度 (TPS)</th>
+      </tr></thead><tbody id="quotaRows">
+        <tr><td colspan="6" class="empty">点「刷新配额」加载</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 2. 观测与性能 (Observability & Performance) ============ -->
+<div class="panel" id="p-observe">
+  <!-- 用量概览与趋势 -->
   <div class="sec">
     <div class="toolbar">
       <select id="winSel">
@@ -202,7 +892,7 @@
         <option value="168">最近 7 天</option>
         <option value="720">最近 30 天</option>
       </select>
-      <button class="primary" id="refreshUsage">刷新</button>
+      <button class="primary" id="refreshUsage">刷新数据</button>
       <span class="sub" id="usageUpdated"></span>
     </div>
     <div class="grid" id="overviewCards"></div>
@@ -220,62 +910,42 @@
   </div>
 
   <div class="sec">
-    <h2 class="sec-title">按厂商</h2>
+    <h2 class="sec-title">按厂商分布</h2>
     <div class="grid" id="providerUsageCards"></div>
   </div>
 
+  <!-- 模型性能透视表 -->
   <div class="sec">
-    <h2 class="sec-title">按模型</h2>
-    <div class="card" style="padding:0">
-      <table><thead><tr>
-        <th>模型</th><th>厂商</th><th>请求数</th><th>输入 token</th><th>输出 token</th><th>平均首字延迟</th>
-      </tr></thead><tbody id="modelRows"><tr><td colspan="6" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr></tbody></table>
-    </div>
-  </div>
-</div>
-
-<!-- ============ 可用模型 ============ -->
-<div class="panel" id="p-avail">
-  <div class="sec">
-    <div class="toolbar">
-      <button class="primary" id="refreshAvail">刷新</button>
-      <span class="sub" id="availStatus"></span>
-      <span class="sub">模型名带厂商前缀，点击即可复制到 ZCode 等工具</span>
-    </div>
-    <div id="availGroups" class="grid" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr))"></div>
-  </div>
-</div>
-
-<!-- ============ 模型性能 ============ -->
-<div class="panel" id="p-models">
-  <div class="sec">
-    <div class="toolbar">
-      <select id="mWinSel">
-        <option value="24">最近 24 小时</option>
-        <option value="168" selected>最近 7 天</option>
-        <option value="720">最近 30 天</option>
-        <option value="8760">全部</option>
-      </select>
-      <button class="primary" id="refreshModels">刷新</button>
-      <div style="position:relative;display:inline-block">
-        <button id="purgeMenuBtn" onclick="togglePurgeMenu(event)">数据管理 ▾</button>
-        <div id="purgeMenu" style="display:none;position:absolute;left:0;top:100%;background:#181b22;border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.5);z-index:99;min-width:180px;padding:4px 0;margin-top:4px">
-          <div onclick="handlePurgeAction('clear_all_errors')" style="padding:8px 14px;color:var(--bad);cursor:pointer;font-size:12px;display:flex;align-items:center;gap:6px" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
-            <span>🧹</span> 清理全部失败记录
-          </div>
-          <div style="border-top:1px solid var(--border);margin:4px 0"></div>
-          <div onclick="handlePurgeAction('purge_30')" style="padding:8px 14px;cursor:pointer;font-size:12px" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
-            淘汰 30 天前旧数据
-          </div>
-          <div onclick="handlePurgeAction('purge_90')" style="padding:8px 14px;cursor:pointer;font-size:12px" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
-            淘汰 90 天前旧数据
+    <div class="card-h" style="margin-bottom:8px">
+      <h2 class="sec-title" style="margin:0">模型性能透视 · 延迟与生成速率 (P10 / P50 / P90 / AVG)</h2>
+      <div style="display:flex;align-items:center;gap:8px">
+        <select id="mWinSel" style="padding:3px 8px;font-size:12px">
+          <option value="24">最近 24 小时</option>
+          <option value="168" selected>最近 7 天</option>
+          <option value="720">最近 30 天</option>
+          <option value="8760">全部历史</option>
+        </select>
+        <button class="primary sm" id="refreshModels">刷新性能</button>
+        <div style="position:relative;display:inline-block">
+          <button id="purgeMenuBtn" class="sm" onclick="togglePurgeMenu(event)">数据治理 ▾</button>
+          <div id="purgeMenu" style="display:none;position:absolute;right:0;top:100%;background:#181b22;border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.5);z-index:99;min-width:180px;padding:4px 0;margin-top:4px">
+            <div onclick="handlePurgeAction('clear_all_errors')" style="padding:8px 14px;color:var(--bad);cursor:pointer;font-size:12px;display:flex;align-items:center;gap:6px" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
+              <span>🧹</span> 清理全部失败记录
+            </div>
+            <div style="border-top:1px solid var(--border);margin:4px 0"></div>
+            <div onclick="handlePurgeAction('purge_30')" style="padding:8px 14px;cursor:pointer;font-size:12px" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
+              淘汰 30 天前旧数据
+            </div>
+            <div onclick="handlePurgeAction('purge_90')" style="padding:8px 14px;cursor:pointer;font-size:12px" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'">
+              淘汰 90 天前旧数据
+            </div>
           </div>
         </div>
       </div>
-      <span class="sub">按「厂商 + 模型」聚合 · 点任意一行展开逐条明细</span>
-    </div><div class="sub" style="margin-bottom:11px;line-height:1.6">
+    </div>
+    <div class="sub" style="margin-bottom:11px;line-height:1.6">
       <b>TTFT</b> 首字延迟 · <b>耗时</b> 请求总时长 · <b>TPS</b> 生成速度 (Token/秒) ·
-      <b>P10</b> 最佳表现 (最快10%) · <b>P50</b> 中位数 (日常水平) · <b>P90</b> 慢速长尾 · <b>avg</b> 平均值
+      <b>P10</b> 最佳表现 (最快10%) · <b>P50</b> 中位数 (日常基准) · <b>P90</b> 慢速长尾 · <b>avg</b> 平均值
     </div>
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="ptable">
@@ -292,10 +962,10 @@
             <th colspan="4" class="g-tps grp-start grp-end">TPS</th>
           </tr>
           <tr>
-            <th class="g-ttft grp-start" title="10% 分位数: 最快 10% 请求达到的起手延迟 (最佳速度)">P10</th>
-            <th class="g-ttft" title="50% 分位数 / 中位数: 正好排在中间那一半请求的延迟，代表日常典型体验">P50</th>
-            <th class="g-ttft" title="90% 分位数: 90% 的请求快于此时间，代表慢速长尾上限">P90</th>
-            <th class="grp g-ttft" title="平均首字延迟 (所有请求耗时总和 ÷ 总次数)">avg</th>
+            <th class="g-ttft grp-start" title="10% 分位数: 最快 10% 请求达到的起手延迟">P10</th>
+            <th class="g-ttft" title="50% 分位数 / 中位数: 代表日常典型起手延迟">P50</th>
+            <th class="g-ttft" title="90% 分位数: 慢速长尾上限">P90</th>
+            <th class="grp g-ttft" title="平均首字延迟">avg</th>
 
             <th class="g-dur grp-start" title="10% 分位数: 最快 10% 请求的总耗时">P10</th>
             <th class="g-dur" title="50% 分位数: 典型请求总耗时 (中位数)">P50</th>
@@ -315,27 +985,27 @@
     </div>
   </div>
 
+  <!-- 拥堵分析 -->
   <div class="sec">
     <h2 class="sec-title">拥堵分析 — 什么时段该换模型</h2>
     <div class="sub" style="margin-bottom:11px">
       按<b>本地小时</b>聚合网关流量，<b>每个模型单独统计</b>。柱子越高 = 那个时段越慢。
-      <b>拥堵倍数</b>是最慢时段 ÷ 最快时段，超过 2 倍说明有明显时段差异，高峰期可以临时换个模型。
-      <br>柱子用的是<b>归一化后</b>的 TTFT：先按每个模型的「prompt 长度 → 首字延迟」关系把
-      各请求折算到同一基准，再取中位数。这样"某个时段正好在处理大文件"不会被误判成拥堵。
-      鼠标悬停能看到原始值。
+      <b>拥堵倍数</b>是最慢时段 ÷ 最快时段，超过 2 倍说明有明显时段差异。
     </div>
     <div id="congestionCards" class="grid"></div>
   </div>
 </div>
 
-<!-- ============ 厂商配置 ============ -->
+<!-- ============ 3. 厂商与模型 (Providers & Models) ============ -->
 <div class="panel" id="p-providers">
+  <!-- 厂商接入与配置 (纯粹接入表单，不混杂查余额) -->
   <div class="sec">
-    <div class="toolbar">
-      <button class="primary" id="refreshProviders">刷新</button>
-      <button id="checkBalances">查询全部余额</button>
-      <button id="addCustomBtn">+ 添加自定义端点</button>
-      <span class="sub">修改后立即生效，无需重启</span>
+    <div class="card-h" style="margin-bottom:12px">
+      <h2 class="sec-title" style="margin:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> 接入厂商管理</h2>
+      <div style="display:flex;gap:8px">
+        <button id="addCustomBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 添加自定义端点</button>
+        <button class="primary sm" id="refreshProviders">刷新状态</button>
+      </div>
     </div>
     <div class="grid" id="providerCards"></div>
   </div>
@@ -344,120 +1014,72 @@
     <h2 class="sec-title">添加自定义 OpenAI 兼容端点</h2>
     <div class="card" style="max-width:560px">
       <div style="display:grid;gap:11px">
-        <label class="sub">名称<br><input id="cfName" style="width:100%;cursor:text" placeholder="例如 智谱 GLM"></label>
-        <label class="sub">Base URL<br><input id="cfUrl" style="width:100%;cursor:text" placeholder="https://open.bigmodel.cn/api/paas/v4"></label>
+        <label class="sub">名称<br><input type="text" id="cfName" style="width:100%;cursor:text" placeholder="例如 智谱 GLM"></label>
+        <label class="sub">Base URL<br><input type="text" id="cfUrl" style="width:100%;cursor:text" placeholder="https://open.bigmodel.cn/api/paas/v4"></label>
         <label class="sub">API Key<br><input id="cfKey" type="password" style="width:100%;cursor:text" placeholder="sk-..."></label>
         <div style="display:flex;gap:9px">
-          <button class="primary" id="cfSave">保存</button>
+          <button class="primary" id="cfSave">保存端点</button>
           <button id="cfCancel">取消</button>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- 可用模型速查字典 -->
   <div class="sec">
-    <h2 class="sec-title">代理内核</h2>
-    <div class="card" style="max-width:640px">
+    <div class="card-h" style="margin-bottom:10px">
+      <h2 class="sec-title" style="margin:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 可用模型字典</h2>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="sub" id="availStatus"></span>
+        <button class="primary sm" id="refreshAvail">刷新模型列表</button>
+      </div>
+    </div>
+    <div class="sub" style="margin-bottom:12px">模型名带厂商前缀，点击即可直接复制并粘贴到 Cline / Cursor / ZCode 等外部工具。</div>
+    <div id="availGroups" class="grid" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr));align-items:start"></div>
+  </div>
+</div>
+
+<!-- ============ 4. 网络与节点 (Network & Routing) ============ -->
+<div class="panel" id="p-network">
+  <!-- 代理内核设置 -->
+  <div class="sec">
+    <h2 class="sec-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> 代理内核配置</h2>
+    <div class="card" style="max-width:680px">
       <div class="sub" style="margin-bottom:11px">
         SakuraCat 默认控制 API <span class="mono">12440</span> / 代理 <span class="mono">12450</span>；
         Clash Verge / mihomo 通常是 <span class="mono">9090</span> / <span class="mono">7890</span>。
         换客户端或端口变了就在这里改，保存立即生效。
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <label class="sub">控制 API 地址<br>
-          <input id="kernelApi" style="width:100%;cursor:text" placeholder="http://127.0.0.1:12440">
+          <input type="text" id="kernelApi" style="width:100%;cursor:text" placeholder="http://127.0.0.1:12440">
         </label>
-        <label class="sub">代理地址（Gemini 等境外厂商用）<br>
-          <input id="kernelProxy" style="width:100%;cursor:text" placeholder="http://127.0.0.1:12450">
+        <label class="sub">代理出口地址（Gemini 等海外厂商用）<br>
+          <input type="text" id="kernelProxy" style="width:100%;cursor:text" placeholder="http://127.0.0.1:12450">
         </label>
       </div>
-      <div style="display:flex;gap:9px;margin-top:11px;align-items:center">
-        <button class="primary" id="saveKernel">保存</button>
+      <div style="display:flex;gap:9px;margin-top:12px;align-items:center">
+        <button class="primary" id="saveKernel">保存内核配置</button>
         <span class="sub" id="kernelStatus"></span>
       </div>
     </div>
   </div>
 
+  <!-- Gemini 节点可用性出海风控检测 -->
   <div class="sec">
-    <div class="card" style="margin-bottom:14px">
-      <div class="card-h" style="margin-bottom:9px">
-        <div class="card-t">Antigravity 订阅配额</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="pill" id="quotaSummary">未加载</span>
-          <button class="primary sm" id="loadQuota">刷新配额</button>
-        </div>
-      </div>
-      <div class="sub" style="margin-bottom:11px">
-        复用 Antigravity 的 OAuth 凭据（Google Pro 会员）。走 Google 内部 API，
-        <b>不经过网关</b>，已自动将<b>最新一代（Claude 4.6 / Gemini 3.8 / 3.7 / GPT）置顶排序</b>；测试结果以
-        <span class="pill" style="border-color:var(--purple);color:var(--purple)">基准</span>
-        标记记录到「模型性能」页。
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-        <div class="chip-group" id="quotaFamilyChips">
-          <span class="chip active" data-family="all">全部模型</span>
-          <span class="chip" data-family="claude">Claude (4.6)</span>
-          <span class="chip" data-family="gemini38">Gemini 3.8</span>
-          <span class="chip" data-family="gemini37">Gemini 3.7</span>
-          <span class="chip" data-family="gemini3">Gemini 3.x</span>
-          <span class="chip" data-family="gemini25">Gemini 2.5</span>
-          <span class="chip" data-family="gpt">GPT / 其他</span>
-        </div>
-        <div style="flex:1;min-width:160px;max-width:260px">
-          <input type="text" id="quotaSearch" placeholder="搜索模型 (如 3.8, claude)..." style="width:100%;padding:4px 8px;font-size:12px">
-        </div>
-      </div>
-      <div class="toolbar" style="margin-bottom:0">
-        <label class="sub"><input type="checkbox" id="onlyAvail" checked> 只看有配额</label>
-        <label class="sub"><input type="checkbox" id="onlyRec"> 只看推荐</label>
-        <span class="sub">|</span>
-        <label class="sub">排序:
-          <select id="quotaSortSel" style="padding:2px 6px;font-size:11px">
-            <option value="smart" selected>默认最新代际 (3.8 > 3.7 > 2.5)</option>
-            <option value="remaining_desc">剩余配额从高到低</option>
-            <option value="remaining_asc">剩余配额从低到高</option>
-            <option value="speed_desc">速度 TPS 从快到慢</option>
-            <option value="name_asc">按名称 A-Z</option>
-          </select>
-        </label>
-        <span class="sub">|</span>
-        <button id="benchSelected">测试勾选的模型</button>
-        <button id="benchTop">测试前 3 个推荐</button>
-        <span class="sub" id="benchProgress"></span>
-      </div>
-      <div class="prog"><i id="mbar"></i></div>
-    </div>
-
-    <div class="card" style="padding:0;max-height:600px;overflow-y:auto">
-      <table class="qtable"><thead><tr>
-        <th style="width:30px"><input type="checkbox" id="qCheckAll" title="全选/全不选"></th>
-        <th style="text-align:left">模型</th>
-        <th style="width:28%">5h 滚动剩余配额</th>
-        <th>重置倒计时 / 时间</th>
-        <th style="text-align:right">TTFT</th>
-        <th style="text-align:right">速度 (TPS)</th>
-      </tr></thead><tbody id="quotaRows">
-        <tr><td colspan="6" class="empty">点「刷新配额」加载</td></tr>
-      </tbody></table>
-    </div>
-  </div>
-
-  <div class="sec">
-    <h2 class="sec-title">Gemini 节点可用性</h2>
+    <h2 class="sec-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg> Gemini 节点出海风控检测</h2>
     <div class="card">
       <div class="sub" style="margin-bottom:11px">
         Google 对 Antigravity 调用有地区风控，部分出口 IP 会被
-        <span class="mono">User location is not supported</span> 拒掉 —— 同一国家不同 IP 段也可能一个通一个不通。
-        <br>在下面<b>勾选要用的节点</b>（不勾就不测，避免无谓的节点切换），每个节点会测
-        <b id="attemptsLabel">3</b> 次（单次失败可能只是网络抖动）。<b>测完自动切回你原来的节点。</b>
-        <br><b>每个节点只测一次、结论长期有效</b>——检测会真实动用你的 Google 账号，频繁全量重测容易触发风控；
-        「全选未测」每个地区至多抽 2 个没测过的节点（多轮自然轮换覆盖），香港/澳门等受限地区默认跳过（仍可手动勾选强测）。
+        <span class="mono">User location is not supported</span> 拒掉。
+        <br>在下方勾选要用的节点，每个节点测
+        <b id="attemptsLabel">3</b> 次。<b>测完自动切回原节点。</b>
       </div>
       <div class="toolbar">
-        <button class="primary" id="checkNodes">检测勾选的节点</button>
-        <button id="selectAllNodes">全选未测</button>
-        <button id="clearNodes">清空</button>
-        <label class="sub" title="默认只测从没测过的节点；勾选后已测过的也会重测（会重复动用账号，慎用）">
+        <button class="primary" id="checkNodes">检测勾选节点</button>
+        <button id="selectAllNodes">全选未测 (每区抽2个)</button>
+        <button id="clearNodes">清空勾选</button>
+        <label class="sub">
           <input type="checkbox" id="retestChecked"> 重测已测过的</label>
         <label class="sub">每节点测
           <select id="nodeAttempts" style="padding:2px 6px">
@@ -472,41 +1094,35 @@
       <div id="nodeCheckResults"></div>
     </div>
   </div>
-</div>
 
-<!-- ============ 节点测速 ============ -->
-<div class="panel" id="p-nodes">
+  <!-- 节点矩阵与测速 -->
   <div class="sec">
-    <div class="toolbar">
-      <select id="timeoutSel">
-        <option value="3000">超时 3s</option>
-        <option value="5000" selected>超时 5s</option>
-        <option value="8000">超时 8s</option>
-      </select>
-      <select id="sortModeSel">
-        <option value="region">按地区分组</option>
-        <option value="latency">按延迟排序</option>
-        <option value="status">可用的排前面</option>
-      </select>
-      <button class="primary" id="testAll">测速全部</button>
-      <button id="testFailed">仅测失败</button>
-      <button id="collapseAll">全部收起</button>
-      <span class="sub" id="nodeStatus">连接中…</span>
+    <div class="card-h" style="margin-bottom:8px">
+      <h2 class="sec-title" style="margin:0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> 出口节点矩阵与延迟测速</h2>
+      <div class="toolbar" style="margin:0">
+        <select id="timeoutSel">
+          <option value="3000">超时 3s</option>
+          <option value="5000" selected>超时 5s</option>
+          <option value="8000">超时 8s</option>
+        </select>
+        <select id="sortModeSel">
+          <option value="region">按地区分组</option>
+          <option value="latency">按延迟排序</option>
+          <option value="status">可用的排前面</option>
+        </select>
+        <button class="primary sm" id="testAll">测速全部</button>
+        <button class="sm" id="testFailed">仅测失败</button>
+        <button class="sm" id="collapseAll">全部收起</button>
+      </div>
     </div>
-    <div class="sub" style="margin-bottom:9px">
-      勾选节点后可在「厂商配置 → Gemini 节点可用性」里批量检测 Google 可用性；
-      检测结论会标在节点名后面：<span class="pill good-pill">✓ Gemini</span> 可用 ·
-      <span class="pill warn-pill">⚠ Gemini</span> 不稳 ·
-      <span class="pill bad-pill">✗ Gemini</span> 被地区限制（悬停看详情）。
-    </div>
+    <div class="sub" style="margin-bottom:10px" id="nodeStatus">连接中…</div>
+    <div id="kernelWarn" style="display:none;margin-bottom:9px;padding:9px 12px;border:1px solid var(--warn);border-radius:8px;font-size:12px;line-height:1.7"></div>
     <div class="prog"><i id="nbar"></i></div>
-    <div class="grid" id="nodeKpis"></div>
-  </div>
-
-  <div class="sec">
+    <div class="grid" id="nodeKpis" style="margin-bottom:16px"></div>
     <div class="grid" id="regionGrid"></div>
   </div>
 </div>
+
 </main>
 <div class="toast" id="toast"></div>
 
@@ -514,172 +1130,540 @@
 const $ = (id) => document.getElementById(id);
 let MODELS = [], BENCH = {};
 
-function toast(msg, ms=5000){ const t=$('toast'); t.textContent=msg; t.style.display='block';
-  clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none', ms); }
+function toast(msg, ms=5000){
+  const t=$('toast');
+  if(!t) return;
+  t.textContent=msg;
+  t.style.display='block';
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.style.display='none', ms);
+}
 function fmt(n){ return n==null ? '—' : Number(n).toLocaleString(); }
 function pctColor(p){ return p==null?'var(--muted)': p>50?'var(--good)': p>20?'var(--warn)':'var(--bad)'; }
 
-$('gwAddr').onclick = () => { navigator.clipboard.writeText($('gwAddr').textContent); toast('网关地址已复制'); };
+const gwEl = $('gwAddr');
+if (gwEl) {
+  gwEl.onclick = () => {
+    navigator.clipboard.writeText(gwEl.textContent.trim());
+    toast('网关地址已复制');
+  };
+}
 
-// ---------- tabs ----------
-const TABS = { usage:'p-usage', models:'p-models', avail:'p-avail', providers:'p-providers', nodes:'p-nodes' };
+// ==================== 顶部导航 (4 大领域) ====================
+const TABS = {
+  assets: 'p-assets',
+  observe: 'p-observe',
+  providers: 'p-providers',
+  network: 'p-network'
+};
+let CURRENT_TAB = 'assets';
+
+function switchTab(k) {
+  CURRENT_TAB = k;
+  Object.entries(TABS).forEach(([kk, v]) => {
+    const btn = $('t-' + kk);
+    const panel = $(v);
+    if (btn) btn.classList.toggle('active', kk === k);
+    if (panel) panel.classList.toggle('active', kk === k);
+  });
+  if (k === 'assets') {
+    loadAssets();
+    if (!MODELS.length) loadQuota();
+  } else if (k === 'observe') {
+    loadUsage();
+    loadModelStats();
+    loadCongestion();
+  } else if (k === 'providers') {
+    loadProviders();
+    loadAvail();
+  } else if (k === 'network') {
+    loadKernelConfig();
+    loadNodes();
+  }
+}
+
 Object.keys(TABS).forEach(k => {
-  $('t-'+k).onclick = () => {
-    Object.entries(TABS).forEach(([kk,v]) => {
-      $('t-'+kk).classList.toggle('active', kk===k);
-      $(v).classList.toggle('active', kk===k);
-    });
-    if (k==='usage') loadUsage();
-    if (k==='models') { loadModelStats(); loadCongestion(); }
-    if (k==='avail') loadAvail();
-    if (k==='providers') loadProviders();
-    if (k==='nodes') loadNodes();
+  const btn = $('t-' + k);
+  if (btn) btn.onclick = () => switchTab(k);
+});
+
+const refBtn = $('refreshCurrentTab');
+if (refBtn) {
+  refBtn.onclick = () => {
+    switchTab(CURRENT_TAB);
+    toast('已刷新当前模块');
+  };
+}
+
+// ==================== 1. 资产与配额 (Assets & Quota) ====================
+let ASSETS_DATA = {};
+
+async function loadAssets() {
+  const btn = $('refreshAllBalances');
+  if (btn) { btn.disabled = true; btn.textContent = '查询中…'; }
+  const upEl = $('walletUpdated');
+  if (upEl) upEl.textContent = '正在获取全厂商资产…';
+
+  try {
+    const r = await fetch('/api/balances/all', {method: 'POST'}).then(x => x.json()).catch(err => ({ok:false, error:String(err)}));
+    if (!r.ok) {
+      toast('获取资产余额失败: ' + (r.error || '网络错误'));
+      if ($('walletGrid')) $('walletGrid').innerHTML = `<div class="card empty bad">加载失败: ${r.error || '网络异常'}</div>`;
+      if ($('planGrid')) $('planGrid').innerHTML = `<div class="card empty bad">加载失败: ${r.error || '网络异常'}</div>`;
+      return;
+    }
+
+    ASSETS_DATA = r.balances || {};
+    if (upEl) upEl.textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+
+    const balances = Object.values(ASSETS_DATA);
+    const walletList = balances.filter(b => b.kind === 'balance');
+    const planList = balances.filter(b => b.kind === 'plan');
+    const quotaOnlyList = balances.filter(b => b.kind === 'quota' && b.provider !== 'antigravity');
+
+    renderWallets(walletList, quotaOnlyList);
+    renderPlans(planList);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '刷新全部余额'; }
+  }
+}
+
+function renderWallets(walletList, quotaOnlyList) {
+  const el = $('walletGrid');
+  if (!el) return;
+  if (!walletList.length && !quotaOnlyList.length) {
+    el.innerHTML = '<div class="card empty">未检测到已配置且支持余额查询的厂商</div>';
+    return;
+  }
+
+  let html = walletList.map(b => {
+    const isOk = b.available !== false;
+    const currSym = b.currency === 'USD' ? '$' : '¥';
+    const totalDisp = b.total != null ? b.total.toFixed(2) : '—';
+    const dotCls = isOk ? 'on' : 'off';
+
+    return `<div class="wallet-card card">
+      <div class="card-h" style="margin-bottom:8px">
+        <div class="card-t"><span class="dot ${dotCls}"></span>${b.name || b.provider}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="pill">按量付费</span>
+          <button class="sm icon-btn" onclick="refreshSingleBalance('${b.provider}')" title="单独刷新此卡"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+        </div>
+      </div>
+      <div class="balance-num ${isOk ? 'good' : 'bad'}">
+        <span class="curr">${currSym}</span>${isOk ? totalDisp : '查询失败'}
+      </div>
+      <div class="balance-meta">
+        ${isOk ? `
+          <div>已用: <span class="mono">${b.used != null ? currSym + Number(b.used).toFixed(2) : '—'}</span></div>
+          ${b.granted != null ? `<div>赠送: <span class="mono">${currSym + Number(b.granted).toFixed(2)}</span></div>` : ''}
+        ` : `
+          <div class="bad" title="${b.error || ''}">${(b.error || '连通失败').slice(0, 40)}</div>
+        `}
+      </div>
+    </div>`;
+  }).join('');
+
+  if (quotaOnlyList.length) {
+    html += quotaOnlyList.map(b => {
+      const note = (b.raw && b.raw.note) || '官方无公开余额查询接口';
+      const consoleUrl = b.raw && b.raw.console;
+      return `<div class="wallet-card card" style="opacity:0.85">
+        <div class="card-h" style="margin-bottom:8px">
+          <div class="card-t"><span class="dot ${b.available ? 'on' : 'off'}"></span>${b.name || b.provider}</div>
+          <span class="pill">Token/直连</span>
+        </div>
+        <div class="sub" style="margin-top:6px;line-height:1.6">
+          ${note}
+          ${consoleUrl ? `<br><a href="${consoleUrl}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px">打开官方控制台 ↗</a>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  el.innerHTML = html;
+}
+
+function renderPlans(planList) {
+  const el = $('planGrid');
+  if (!el) return;
+  if (!planList.length) {
+    el.innerHTML = '<div class="card empty">未检测到已配置的订阅套餐厂商 (如 Kimi Coding Plan)</div>';
+    return;
+  }
+
+  el.innerHTML = planList.map(p => {
+    const wins = p.windows || [];
+    const winHtml = wins.map(w => {
+      const used = w.used_pct;
+      const color = used == null ? 'var(--muted)' : used < 50 ? 'var(--good)' : used < 80 ? 'var(--warn)' : 'var(--bad)';
+      const reset = w.reset_time ? new Date(w.reset_time).toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}) : null;
+      const counts = (w.used != null && w.limit != null) ? ` <span class="muted">(${w.used}/${w.limit})</span>` : '';
+      return `<div class="plan-window">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:4px">
+          <span style="font-weight:500">${w.label}${counts}</span>
+          <span class="mono" style="color:${color};font-weight:600">${used != null ? used + '% 已用' : '—'}</span>
+        </div>
+        <div class="bar" style="margin:4px 0 6px 0"><i style="width:${used ?? 0}%;background:${color}"></i></div>
+        ${reset ? `<div class="kpi-label" style="font-size:11px">${reset} 重置</div>` : ''}
+      </div>`;
+    }).join('');
+
+    return `<div class="plan-card card">
+      <div class="card-h" style="margin-bottom:6px">
+        <div class="card-t"><span class="dot on"></span>${p.name || p.provider}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="pill">周期订阅</span>
+          <button class="sm icon-btn" onclick="refreshSingleBalance('${p.provider}')" title="单独刷新"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+        </div>
+      </div>
+      <div class="sub" style="margin-bottom:8px">动态滑动时间窗配额消耗</div>
+      ${winHtml || '<div class="sub muted">无窗口用量数据</div>'}
+    </div>`;
+  }).join('');
+}
+
+window.refreshSingleBalance = async (pid) => {
+  toast(`正在刷新 ${pid} 资产…`);
+  const r = await fetch(`/api/providers/${pid}/balance`, {method:'POST'}).then(x=>x.json()).catch(err=>({ok:false, error:String(err)}));
+  if (r.ok) {
+    const prov = PROVIDERS.find(x => x.id === pid);
+    ASSETS_DATA[pid] = {...r, name: prov?.name || pid};
+    const balances = Object.values(ASSETS_DATA);
+    renderWallets(balances.filter(b=>b.kind==='balance'), balances.filter(b=>b.kind==='quota' && b.provider!=='antigravity'));
+    renderPlans(balances.filter(b=>b.kind==='plan'));
+    toast(`${prov?.name || pid} 余额已更新`);
+  } else {
+    toast(`刷新失败: ${r.error || '未知错误'}`);
+  }
+};
+
+const rfBalBtn = $('refreshAllBalances');
+if (rfBalBtn) rfBalBtn.onclick = () => loadAssets();
+
+// ==================== Antigravity 订阅配额 ====================
+let QUOTA_FAMILY = 'all';
+let QUOTA_PICKS = new Set();
+
+async function loadQuota(){
+  const btn = $('loadQuota');
+  if (btn) { btn.disabled = true; btn.textContent='加载中…'; }
+  try {
+    const r = await fetch('/api/models/quota').then(x=>x.json());
+    if (r.ok) {
+      MODELS = r.models;
+      renderQuota();
+      const avail = MODELS.filter(m=>m.remaining>0).length;
+      if ($('quotaSummary')) $('quotaSummary').textContent = `${MODELS.length} 个模型 · ${avail} 个有额度`;
+      toast(`已加载 ${MODELS.length} 个模型（最新代际优先）`);
+    } else toast('加载失败: '+r.error, 10000);
+  } finally {
+    if (btn) { btn.disabled=false; btn.textContent='刷新配额'; }
+  }
+}
+
+function getModelGenBadge(mid, prov){
+  const m = mid.toLowerCase();
+  if (m.includes('claude') || (prov && prov.toLowerCase().includes('anthropic'))) {
+    return '<span class="gen-badge claude">Claude 4.6</span>';
+  }
+  if (m.includes('gpt') || (prov && prov.toLowerCase().includes('openai'))) {
+    return '<span class="gen-badge gpt">GPT</span>';
+  }
+  if (m.includes('3.8')) return '<span class="gen-badge g38">Gemini 3.8</span>';
+  if (m.includes('3.7')) return '<span class="gen-badge g37">Gemini 3.7</span>';
+  if (m.includes('3.6') || m.includes('3.5') || m.includes('3.1') || m.includes('gemini-3')) {
+    return '<span class="gen-badge g3">Gemini 3.x</span>';
+  }
+  if (m.includes('2.5')) return '<span class="gen-badge">Gemini 2.5</span>';
+  return '';
+}
+
+function quotaFiltered(){
+  const onlyAvail = $('onlyAvail')?.checked ?? false;
+  const onlyRec = $('onlyRec')?.checked ?? false;
+  const kw = ($('quotaSearch')?.value || '').trim().toLowerCase();
+  const sortMode = $('quotaSortSel')?.value || 'smart';
+
+  let list = MODELS.filter(m => {
+    if (onlyAvail && (m.remaining == null || m.remaining <= 0)) return false;
+    if (onlyRec && !m.recommended) return false;
+
+    if (QUOTA_FAMILY !== 'all') {
+      const mid = m.id.toLowerCase();
+      const prov = (m.provider || '').toLowerCase();
+      if (QUOTA_FAMILY === 'claude' && !(mid.includes('claude') || prov.includes('anthropic'))) return false;
+      if (QUOTA_FAMILY === 'gemini38' && !mid.includes('3.8')) return false;
+      if (QUOTA_FAMILY === 'gemini37' && !mid.includes('3.7')) return false;
+      if (QUOTA_FAMILY === 'gemini3' && !(mid.includes('3.1') || mid.includes('3.5') || mid.includes('3.6') || mid.includes('gemini-3'))) return false;
+      if (QUOTA_FAMILY === 'gemini25' && !mid.includes('2.5')) return false;
+      if (QUOTA_FAMILY === 'gpt' && !(mid.includes('gpt') || prov.includes('openai') || mid.startsWith('chat_') || mid.startsWith('tab_'))) return false;
+    }
+
+    if (kw) {
+      const text = `${m.id} ${m.display_name || ''} ${m.provider || ''}`.toLowerCase();
+      if (!text.includes(kw)) return false;
+    }
+    return true;
+  });
+
+  if (sortMode === 'remaining_desc') {
+    list.sort((a,b) => (b.remaining || 0) - (a.remaining || 0));
+  } else if (sortMode === 'remaining_asc') {
+    list.sort((a,b) => (a.remaining || 0) - (b.remaining || 0));
+  } else if (sortMode === 'speed_desc') {
+    list.sort((a,b) => ((BENCH[b.id]?.tokens_per_sec || 0) - (BENCH[a.id]?.tokens_per_sec || 0)));
+  } else if (sortMode === 'name_asc') {
+    list.sort((a,b) => a.id.localeCompare(b.id));
+  }
+  return list;
+}
+
+function prettyProvider(p){
+  if (!p) return '';
+  return p.replace(/^MODEL_PROVIDER_/,'').toLowerCase()
+          .replace(/^\w/, c => c.toUpperCase());
+}
+
+function renderQuota(){
+  const list = quotaFiltered();
+  const el = $('quotaRows');
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = `<tr><td colspan="6" class="empty">
+      <div style="padding:48px 0;text-align:center">
+        <div style="font-size:32px;margin-bottom:10px">🔍</div>
+        <div style="color:var(--text);font-size:14.5px;font-weight:600;margin-bottom:6px">未找到匹配的模型</div>
+        <div class="muted" style="font-size:12.5px;margin-bottom:16px;max-width:460px;margin-left:auto;margin-right:auto">
+          当前搜索词："<span class="mono" style="color:var(--warn)">${($('quotaSearch')?.value||'').slice(0,50)}</span>"<br>
+          <span style="font-size:11.5px">提示：本输入框仅用于<b>过滤模型名称</b>（如输入 3.8 / claude / gpt），不是填网关地址或 API Key 的地方。</span>
+        </div>
+        <button class="primary sm" onclick="resetQuotaFilters()">一键清除搜索词与筛选条件</button>
+      </div>
+    </td></tr>`;
+    return;
+  }
+  el.innerHTML = list.map(m => {
+    const b = BENCH[m.id] || {};
+    const picked = QUOTA_PICKS.has(m.id);
+    const pct = m.remaining;
+    const badge = getModelGenBadge(m.id, m.provider);
+    return `<tr class="${picked?'picked':''}">
+      <td><input type="checkbox" ${picked?'checked':''} onchange="toggleQuotaPick('${m.id}', this.checked)" style="cursor:pointer"></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${badge}
+          <div class="mono" style="font-weight:600">${m.id}</div>
+        </div>
+        <div class="kpi-label" style="margin-top:2px">
+          ${m.display_name ? `<span style="color:var(--text);margin-right:6px">${m.display_name}</span>` : ''}
+          ${prettyProvider(m.provider)}
+          ${m.recommended?' <span class="pill">推荐</span>':''}
+          ${m.thinking?' <span class="pill">思考</span>':''}
+        </div>
+      </td>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div class="bar" style="flex:1;margin:0"><i style="width:${pct??0}%;background:${pctColor(pct)}"></i></div>
+        <span class="mono" style="color:${pctColor(pct)};min-width:46px;text-align:right">${pct!=null?pct+'%':'—'}</span>
+      </div></td>
+      <td class="muted" style="font-size:11px">
+        ${(() => {
+          if (!m.reset_time) return '—';
+          const rDate = new Date(m.reset_time);
+          const diffMs = rDate - Date.now();
+          const fmtDate = rDate.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+          if (diffMs <= 0) return `<span class="good" title="${fmtDate}">即将重置</span>`;
+          const mins = Math.ceil(diffMs / 60000);
+          const hrs = Math.floor(mins / 60);
+          const remMins = mins % 60;
+          const cd = hrs > 0 ? `${hrs}h ${remMins}m 后` : `${remMins}m 后`;
+          return `<span title="将在 ${fmtDate} 重置">${cd} <span style="opacity:0.6;font-size:10px">(${fmtDate})</span></span>`;
+        })()}
+      </td>
+      <td class="num">${b.ttft_ms!=null?(b.ttft_ms/1000).toFixed(1)+' s':'—'}</td>
+      <td class="num">${b.tokens_per_sec!=null?b.tokens_per_sec.toFixed(1):'—'}</td>
+    </tr>`;
+  }).join('');
+  fillBenchFromStats();
+}
+
+async function fillBenchFromStats(){
+  try {
+    const r = await fetch('/api/usage/model_stats?hours=8760').then(x=>x.json());
+    let changed = false;
+    for (const s of (r.stats||[])) {
+      if (s.source!=='bench') continue;
+      if (!BENCH[s.model]) {
+        BENCH[s.model] = {ttft_ms: s.ttft && s.ttft.avg, tokens_per_sec: s.tps && s.tps.avg};
+        changed = true;
+      }
+    }
+    if (changed) {
+      for (const m of quotaFiltered()) {
+        const b = BENCH[m.id]; if (!b) continue;
+        const tr = [...document.querySelectorAll('#quotaRows tr')].find(
+          t => t.querySelector('.mono')?.textContent?.trim() === m.id);
+        if (tr) {
+          const tds = tr.querySelectorAll('td');
+          if (tds[4]) tds[4].textContent = b.ttft_ms!=null ? (b.ttft_ms/1000).toFixed(1)+' s' : '—';
+          if (tds[5]) tds[5].textContent = b.tokens_per_sec!=null ? b.tokens_per_sec.toFixed(1) : '—';
+        }
+      }
+    }
+  } catch(e) {}
+}
+
+window.toggleQuotaPick = (id, on) => {
+  if (on) QUOTA_PICKS.add(id); else QUOTA_PICKS.delete(id);
+  renderQuota();
+};
+if ($('loadQuota')) $('loadQuota').onclick = loadQuota;
+if ($('onlyAvail')) $('onlyAvail').onchange = renderQuota;
+if ($('onlyRec')) $('onlyRec').onchange = renderQuota;
+if ($('quotaSortSel')) $('quotaSortSel').onchange = renderQuota;
+window.resetQuotaFilters = () => {
+  const qs = $('quotaSearch');
+  if (qs) qs.value = '';
+  const clr = $('clearQuotaSearch');
+  if (clr) clr.style.display = 'none';
+  QUOTA_FAMILY = 'all';
+  document.querySelectorAll('#quotaFamilyChips .chip').forEach(c => c.classList.toggle('active', c.getAttribute('data-family')==='all'));
+  if ($('onlyAvail')) $('onlyAvail').checked = false;
+  if ($('onlyRec')) $('onlyRec').checked = false;
+  renderQuota();
+  toast('已重置模型筛选');
+};
+
+const qSearchInput = $('quotaSearch');
+const qClearBtn = $('clearQuotaSearch');
+if (qSearchInput) {
+  qSearchInput.oninput = () => {
+    if (qClearBtn) qClearBtn.style.display = qSearchInput.value ? 'inline-flex' : 'none';
+    renderQuota();
+  };
+}
+if (qClearBtn) {
+  qClearBtn.onclick = () => {
+    if (qSearchInput) qSearchInput.value = '';
+    qClearBtn.style.display = 'none';
+    renderQuota();
+  };
+}
+
+document.querySelectorAll('#quotaFamilyChips .chip').forEach(chip => {
+  chip.onclick = () => {
+    document.querySelectorAll('#quotaFamilyChips .chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    QUOTA_FAMILY = chip.getAttribute('data-family');
+    renderQuota();
   };
 });
 
-// ==================== 可用模型 ====================
-let AVAIL_EXPANDED = new Set();     // 默认全收起, 厂商多时不占屏
-
-async function loadAvail(force=false){
-  const q = force ? '?refresh=1' : '';
-  const r = await fetch('/api/models'+q).then(x=>x.json());
-  const providers = r.providers || [];
-  const errors = r.errors || {};
-  const total = providers.reduce((s,g)=>s+g.models.length, 0);
-  const errCount = Object.keys(errors).length;
-  $('availStatus').textContent = `${total} 个模型 · ${providers.length} 个厂商`
-    + (errCount ? ` · ${errCount} 个厂商拉取失败` : '')
-    + (r.age!=null ? ` · 缓存 ${Math.round(r.age)}s` : '');
-  if (!providers.length && !errCount) {
-    $('availGroups').innerHTML = '<div class="card empty">还没有配置任何厂商 — 去「厂商配置」页填 API key</div>';
-    return;
-  }
-  $('availGroups').innerHTML = providers.map(g => {
-    const open = AVAIL_EXPANDED.has(g.id);
-    const badge = open ? '▾' : '▸';
-    const rows = g.models.map(m => `
-      <div class="avail-model" title="点击复制 ${m}" onclick="copyModel('${m}')">
-        <span class="mono">${m}</span>
-        <span class="avail-copy">复制</span>
-      </div>`).join('');
-    return `<div class="card avail-card">
-      <div class="avail-head" onclick="toggleAvail('${g.id}')">
-        <span class="avail-name">
-          <span class="muted" style="font-size:11px">${badge}</span>${g.name}
-          <span class="pill">${g.models.length}</span>
-        </span>
-        <span class="mono muted" style="font-size:11px">${g.id}</span>
-      </div>
-      <div class="avail-body ${open?'open':''}">${rows||'<div class="avail-model muted">无模型</div>'}</div>
-    </div>`;
-  }).join('') + Object.entries(errors).map(([pid,err]) => `
-    <div class="card avail-card">
-      <div class="avail-head" onclick="toggleAvail('${pid}')">
-        <span class="avail-name"><span class="muted" style="font-size:11px">▸</span>${pid}
-          <span class="pill warn-pill">失败</span></span>
-      </div>
-      <div class="avail-body"><div class="avail-model bad">${err}</div></div>
-    </div>`).join('');
+if ($('qCheckAll')) {
+  $('qCheckAll').onchange = (e) => {
+    const list = quotaFiltered();
+    if (e.target.checked) list.forEach(m=>QUOTA_PICKS.add(m.id));
+    else list.forEach(m=>QUOTA_PICKS.delete(m.id));
+    renderQuota();
+  };
 }
 
-window.toggleAvail = (id) => {
-  if (AVAIL_EXPANDED.has(id)) AVAIL_EXPANDED.delete(id);
-  else AVAIL_EXPANDED.add(id);
-  loadAvail();
-};
-
-window.copyModel = async (m) => {
-  try {
-    await navigator.clipboard.writeText(m);
-    toast(`已复制 ${m}`);
-  } catch(e) {
-    // clipboard API 不可用时的兜底 (如非安全上下文/权限被拒)
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = m; ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      toast(`已复制 ${m}`);
-    } catch(e2) {
-      toast('复制失败，请手动复制');
-    }
+async function runBench(models){
+  if (!models.length) { toast('先勾选要测的模型'); return; }
+  const btns = [$('benchSelected'), $('benchTop')].filter(Boolean);
+  btns.forEach(b=>b.disabled=true);
+  if ($('benchProgress')) $('benchProgress').textContent = `0/${models.length}`;
+  const {job_id} = await fetch('/api/models/benchmark', {method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({models, max_tokens:2048})}).then(x=>x.json());
+  if (!job_id) { toast('启动失败'); btns.forEach(b=>b.disabled=false); return; }
+  while (true) {
+    const j = await fetch(`/api/models/benchmark/${job_id}`).then(x=>x.json());
+    Object.assign(BENCH, j.results);
+    if ($('mbar')) $('mbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
+    if ($('benchProgress')) $('benchProgress').textContent = `${j.done}/${j.total}`;
+    renderQuota();
+    if (j.status!=='running') break;
+    await new Promise(r=>setTimeout(r,600));
   }
-};
-$('refreshAvail').onclick = () => loadAvail(true);
+  if ($('mbar')) $('mbar').style.width='0%';
+  if ($('benchProgress')) $('benchProgress').textContent = '完成';
+  btns.forEach(b=>b.disabled=false);
+  toast('基准测试完成 — 结果已写入「观测与性能」页');
+}
 
-// ==================== 用量总览 ====================
+if ($('benchSelected')) $('benchSelected').onclick = () => runBench([...QUOTA_PICKS]);
+if ($('benchTop')) $('benchTop').onclick = () => runBench(
+  MODELS.filter(m=>m.remaining>0).sort((a,b)=>(b.recommended-a.recommended)||(b.remaining-a.remaining)).slice(0,3).map(m=>m.id)
+);
+
+// ==================== 2. 观测与性能 (Observability & Performance) ====================
 async function loadUsage(){
-  const h = $('winSel').value;
+  const h = $('winSel')?.value || '24';
   const [sum, prov, mod, tl] = await Promise.all([
-    fetch(`/api/usage/summary?hours=${h}`).then(r=>r.json()),
-    fetch(`/api/usage/by_provider?hours=${h}`).then(r=>r.json()),
-    fetch(`/api/usage/by_model?hours=${h}`).then(r=>r.json()),
-    fetch(`/api/usage/timeline?hours=${h}&buckets=28`).then(r=>r.json()),
+    fetch(`/api/usage/summary?hours=${h}`).then(r=>r.json()).catch(()=>({})),
+    fetch(`/api/usage/by_provider?hours=${h}`).then(r=>r.json()).catch(()=>({})),
+    fetch(`/api/usage/by_model?hours=${h}`).then(r=>r.json()).catch(()=>({})),
+    fetch(`/api/usage/timeline?hours=${h}&buckets=28`).then(r=>r.json()).catch(()=>({})),
   ]);
-  $('usageUpdated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+  if ($('usageUpdated')) $('usageUpdated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
 
-  $('overviewCards').innerHTML = `
-    ${kpiCard('总请求数', fmt(sum.requests), sum.errors ? `${sum.errors} 个失败` : '全部成功')}
-    ${kpiCard('Token 总消耗', fmt(sum.total_tokens), `输入 ${fmt(sum.input_tokens)} / 输出 ${fmt(sum.output_tokens)}`)}
-    ${kpiCard('平均首字延迟', sum.avg_ttft!=null ? sum.avg_ttft+' ms' : '—', 'TTFT，体感流畅度关键指标')}
-    ${kpiCard('平均总耗时', sum.avg_duration!=null ? (sum.avg_duration/1000).toFixed(1)+' s' : '—', '单次请求完整耗时')}
-    ${kpiCard('活跃厂商', (prov.providers||[]).length, '窗口内有调用的厂商数')}
-  `;
+  if ($('overviewCards')) {
+    $('overviewCards').innerHTML = `
+      ${kpiCard('总请求数', fmt(sum.requests), sum.errors ? `${sum.errors} 个失败` : '全部成功')}
+      ${kpiCard('Token 总消耗', fmt(sum.total_tokens), `输入 ${fmt(sum.input_tokens)} / 输出 ${fmt(sum.output_tokens)}`)}
+      ${kpiCard('平均首字延迟', sum.avg_ttft!=null ? sum.avg_ttft+' ms' : '—', 'TTFT，体感流畅度关键指标')}
+      ${kpiCard('平均总耗时', sum.avg_duration!=null ? (sum.avg_duration/1000).toFixed(1)+' s' : '—', '单次请求完整耗时')}
+      ${kpiCard('活跃厂商', (prov.providers||[]).length, '窗口内有调用的厂商数')}
+    `;
+  }
 
   const ps = prov.providers || [];
-  $('providerUsageCards').innerHTML = ps.length ? ps.map(p => {
-    const tot = p.total_tokens || 0;
-    const max = Math.max(...ps.map(x=>x.total_tokens||0), 1);
-    return `<div class="card">
-      <div class="card-h"><div class="card-t">${p.provider}</div>
-        <span class="pill">${p.requests} 次</span></div>
-      <div class="kpi">${fmt(tot)}</div>
-      <div class="kpi-label">token 消耗</div>
-      <div class="bar"><i style="width:${(tot/max*100).toFixed(0)}%;background:var(--accent)"></i></div>
-      <div class="card-row">
-        <div><div class="kpi sm">${fmt(p.input_tokens)}</div><div class="kpi-label">输入</div></div>
-        <div><div class="kpi sm">${fmt(p.output_tokens)}</div><div class="kpi-label">输出</div></div>
-        <div><div class="kpi sm">${p.avg_ttft!=null?p.avg_ttft+'ms':'—'}</div><div class="kpi-label">首字延迟</div></div>
-      </div></div>`;
-  }).join('') : '<div class="card empty">窗口内还没有请求记录</div>';
-
-  const ms = mod.models || [];
-  $('modelRows').innerHTML = ms.length ? ms.map(m => `<tr>
-    <td class="mono">${m.model}</td><td><span class="pill">${m.provider}</span></td>
-    <td>${fmt(m.requests)}</td><td>${fmt(m.input_tokens)}</td><td>${fmt(m.output_tokens)}</td>
-    <td>${m.avg_ttft!=null?m.avg_ttft+' ms':'—'}</td></tr>`).join('')
-    : '<tr><td colspan="6" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>';
+  if ($('providerUsageCards')) {
+    $('providerUsageCards').innerHTML = ps.length ? ps.map(p => {
+      const tot = p.total_tokens || 0;
+      const max = Math.max(...ps.map(x=>x.total_tokens||0), 1);
+      return `<div class="card">
+        <div class="card-h"><div class="card-t">${p.provider}</div>
+          <span class="pill">${p.requests} 次</span></div>
+        <div class="kpi">${fmt(tot)}</div>
+        <div class="kpi-label">token 消耗</div>
+        <div class="bar"><i style="width:${(tot/max*100).toFixed(0)}%;background:var(--accent)"></i></div>
+        <div class="card-row">
+          <div><div class="kpi sm">${fmt(p.input_tokens)}</div><div class="kpi-label">输入</div></div>
+          <div><div class="kpi sm">${fmt(p.output_tokens)}</div><div class="kpi-label">输出</div></div>
+          <div><div class="kpi sm">${p.avg_ttft!=null?p.avg_ttft+'ms':'—'}</div><div class="kpi-label">首字延迟</div></div>
+        </div></div>`;
+    }).join('') : '<div class="card empty">窗口内还没有请求记录</div>';
+  }
 
   const items = tl.timeline || [];
   const maxV = Math.max(...items.map(x => x.input+x.output), 1);
-  $('timelineChart').innerHTML = items.map(x => {
-    const v = x.input + x.output;
-    const hh = Math.max(1, v/maxV*100);
-    return `<div style="height:${hh}%" title="${v} tokens"></div>`;
-  }).join('');
-  $('tlInput').textContent = fmt(items.reduce((s,x)=>s+x.input,0));
-  $('tlOutput').textContent = fmt(items.reduce((s,x)=>s+x.output,0));
+  if ($('timelineChart')) {
+    $('timelineChart').innerHTML = items.map(x => {
+      const v = x.input + x.output;
+      const hh = Math.max(1, v/maxV*100);
+      return `<div style="height:${hh}%" title="${v} tokens"></div>`;
+    }).join('');
+  }
+  if ($('tlInput')) $('tlInput').textContent = fmt(items.reduce((s,x)=>s+x.input,0));
+  if ($('tlOutput')) $('tlOutput').textContent = fmt(items.reduce((s,x)=>s+x.output,0));
 }
+
 function kpiCard(label, value, sub){
   return `<div class="card"><div class="kpi-label">${label}</div>
     <div class="kpi">${value}</div><div class="kpi-label">${sub}</div></div>`;
 }
-$('refreshUsage').onclick = loadUsage;
-$('winSel').onchange = loadUsage;
+if ($('refreshUsage')) $('refreshUsage').onclick = loadUsage;
+if ($('winSel')) $('winSel').onchange = loadUsage;
 
-// ==================== 模型性能 ====================
+// --- 模型性能透视表 ---
 let MODEL_STATS = [];
 let OPEN_MODELS = new Set();
-
-// 每个指标组的色系, 和表头底色对应
 const GROUP_COLORS = { ttft:'var(--warn)', duration:'var(--accent)', tps:'var(--purple)' };
 
-// 毫秒 -> 秒 (设计稿统一用秒)
 function sec(ms){ return ms==null ? '—' : (ms/1000).toFixed(1); }
 function tps1(v){ return v==null ? '—' : v.toFixed(1); }
 
-// 一组分位数渲染成 4 个单元格 (P10, P50, P90, avg). 列尾带一条按比例的长度条.
 function pctCells(group, key, maxVal, fmtFn){
   const m = group || {};
   const color = GROUP_COLORS[key];
@@ -699,28 +1683,28 @@ function pctCells(group, key, maxVal, fmtFn){
 }
 
 async function loadModelStats(){
-  const h = $('mWinSel').value;
+  const h = $('mWinSel')?.value || '168';
   const r = await fetch(`/api/usage/model_stats?hours=${h}`).then(x=>x.json()).catch(()=>({}));
   MODEL_STATS = r.stats || [];
+  const el = $('modelStatRows');
+  if (!el) return;
   if (!MODEL_STATS.length) {
-    $('modelStatRows').innerHTML = '<tr><td colspan="18" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>';
+    el.innerHTML = '<tr><td colspan="18" class="empty">暂无数据 — 把工具接到网关后这里会有记录</td></tr>';
     return;
   }
-  // 每组的最大值, 用来归一化色条长度
   const maxOf = (key) => Math.max(...MODEL_STATS.map(s => {
     const g = s[key] || {};
     return Math.max(g.p10||0, g.p50||0, g.p90||0, g.avg||0);
   }), 1);
   const maxTtft = maxOf('ttft'), maxDur = maxOf('duration'), maxTps = maxOf('tps');
 
-  $('modelStatRows').innerHTML = MODEL_STATS.map((s,i) => {
+  el.innerHTML = MODEL_STATS.map((s,i) => {
     const tps = s.tps || {};
     const cost = s.cost!=null
       ? `${s.currency==='CNY'?'¥':''}${s.cost.toFixed(2)}`
       : '—';
-    // 来源: 网关=真实流量(有 token/成本); 基准=只能测延迟和速度
     const src = s.source==='bench'
-      ? '<span class="pill" style="border-color:var(--purple);color:var(--purple)">基准</span>'
+      ? '<span class="pill" >基准</span>'
       : s.source==='gateway+bench'
         ? `<span class="pill" title="网关流量为主, 另有 ${s.bench_requests} 次基准测试">网关+基准</span>`
         : '<span class="pill">网关</span>';
@@ -743,7 +1727,6 @@ async function loadModelStats(){
     </td></tr>`;
   }).join('');
 
-  // 恢复先前已展开的模型
   MODEL_STATS.forEach((s, i) => {
     const key = s.provider + ':::' + s.model;
     if (OPEN_MODELS.has(key)) {
@@ -782,7 +1765,6 @@ async function reloadDetailBody(i) {
   if (!body) return;
   const q = `provider=${encodeURIComponent(s.provider)}&model=${encodeURIComponent(s.model)}&limit=100`;
 
-  // 基准数据 (Antigravity 那些走不了网关的模型) 没有网关明细, 看基准记录
   if (s.source === 'bench') {
     const r = await fetch(`/api/usage/benchmark_detail?${q}`).then(x=>x.json()).catch(()=>({}));
     const bs = r.benchmarks || [];
@@ -946,24 +1928,23 @@ window.clearEntireModel = async (provider, model) => {
   }
 };
 
-$('refreshModels').onclick = loadModelStats;
-$('mWinSel').onchange = loadModelStats;
+if ($('refreshModels')) $('refreshModels').onclick = loadModelStats;
+if ($('mWinSel')) $('mWinSel').onchange = loadModelStats;
 
-// 拥堵分析: 每个模型一张卡, 画 24 小时的热力柱
+// --- 拥堵分析 ---
 async function loadCongestion(){
-  const h = $('mWinSel').value;
-  const r = await fetch(`/api/usage/congestion?hours=${h}`).then(x=>x.json());
+  const h = $('mWinSel')?.value || '168';
+  const r = await fetch(`/api/usage/congestion?hours=${h}`).then(x=>x.json()).catch(()=>({}));
   const models = r.models || [];
+  const el = $('congestionCards');
+  if (!el) return;
   if (!models.length) {
-    $('congestionCards').innerHTML =
-      '<div class="card empty">样本还不够 — 至少要有 2 个时段、每个时段 3 次请求才能比较</div>';
+    el.innerHTML = '<div class="card empty">样本还不够 — 至少要有 2 个时段、每个时段 3 次请求才能比较</div>';
     return;
   }
-  $('congestionCards').innerHTML = models.map(m => {
-    // 补齐 0-23 小时, 没数据的时段留空
+  el.innerHTML = models.map(m => {
     const byHour = {};
     (m.hourly||[]).forEach(x => byHour[x.hour] = x);
-    // 用归一化后的值画柱子: 已消除 prompt 长度差异, 反映的是模型本身的快慢
     const vals = (m.hourly||[]).map(x=>x.norm_ttft||0);
     const maxTtft = Math.max(...vals, 1);
     const ratio = m.congestion_ratio;
@@ -1000,106 +1981,107 @@ async function loadCongestion(){
     </div>`;
   }).join('');
 }
-$('refreshModels').addEventListener('click', loadCongestion);
-$('mWinSel').addEventListener('change', loadCongestion);
+if ($('refreshModels')) $('refreshModels').addEventListener('click', loadCongestion);
+if ($('mWinSel')) $('mWinSel').addEventListener('change', loadCongestion);
 
-// ==================== 厂商配置 ====================
+// ==================== 3. 厂商与模型 (Providers & Models) ====================
 let PROVIDERS = [];
 
 async function loadProviders(){
-  const r = await fetch('/api/providers').then(x=>x.json());
+  const r = await fetch('/api/providers').then(x=>x.json()).catch(()=>({}));
   PROVIDERS = r.providers || [];
-  $('providerCards').innerHTML = PROVIDERS.map(p => {
-    // 灯: 关闭=灰, 开启且有 key=绿, 开启没 key=暗
-    const dotCls = !p.enabled ? 'off'
-      : p.configured ? 'on' : 'off';
-    return `<div class="card ${p.enabled?'':'disabled-card'}">
-    <div class="card-h">
-      <div class="card-t"><span class="dot ${dotCls}"></span>${p.name}</div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="pill">${p.custom?'自定义':p.kind}</span>
-        <label class="switch" title="${p.enabled?'点击关闭':'点击开启'}">
-          <input type="checkbox" id="toggle-${p.id}" ${p.enabled?'checked':''} onchange="toggleProvider('${p.id}', this.checked)">
-          <span class="slider"></span>
+  const el = $('providerCards');
+  if (!el) return;
+  el.innerHTML = PROVIDERS.map(p => {
+    const dotCls = !p.enabled ? 'off' : p.configured ? 'on' : 'off';
+    return `<div class="card provider-card ${p.enabled?'':'disabled-card'}">
+      <div class="card-h">
+        <div class="card-t"><span class="dot ${dotCls}"></span>${p.name}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="pill">${p.custom?'自定义':p.kind}</span>
+          <label class="switch" title="${p.enabled?'点击关闭':'点击开启'}">
+            <input type="checkbox" id="toggle-${p.id}" ${p.enabled?'checked':''} onchange="toggleProvider('${p.id}', this.checked)">
+            <span class="slider"></span>
+          </label>
+          <span class="switch-text ${p.enabled?'good':'muted'}" id="st-${p.id}">
+            ${p.enabled ? '已开启' : '已关闭'}
+          </span>
+        </div>
+      </div>
+      <div class="sub mono" style="margin-top:6px;font-size:11px;color:${p.configured?'var(--text)':'var(--muted)'}">
+        ${!p.enabled ? '厂商已禁用' : p.configured ? '✓ 已配置 API Key (' + p.api_key_masked + ')' : '⚠ 未配置 API Key'}
+      </div>
+      <div style="display:grid;gap:7px;margin-top:11px">
+        <label class="sub">API Key
+          <input type="password" id="key-${p.id}" autocomplete="new-password" spellcheck="false" style="width:100%;cursor:text"
+                 placeholder="${p.configured?'留空则保持不变':'填入 key'}" ${p.enabled?'':'disabled'}>
         </label>
-        <span class="switch-text ${p.enabled?'good':'muted'}" id="st-${p.id}">
-          ${p.enabled ? '已开启' : '已关闭'}
-        </span>
+        <label class="sub">Base URL
+          <input type="text" id="url-${p.id}" autocomplete="off" spellcheck="false" style="width:100%;cursor:text" value="${p.base_url}"
+                 placeholder="${p.default_base_url||'https://...'}" ${p.enabled?'':'disabled'}>
+        </label>
+        <div style="display:flex;gap:9px">
+          <button class="primary" style="flex:1" onclick="saveProvider('${p.id}')" ${p.enabled?'':'disabled'}>保存</button>
+          <button style="flex:1" onclick="testProvider('${p.id}')" ${p.enabled?'':'disabled'}>测试连通</button>
+          ${p.custom?`<button class="danger icon-btn" onclick="removeCustom('${p.id}')" title="删除">×</button>`:''}
+        </div>
       </div>
-    </div>
-    <div class="kpi sm ${p.enabled&&p.configured?'good':'muted'}" id="bal-${p.id}">
-      ${!p.enabled ? '已关闭' : p.configured ? (p.api_key_masked || '已配置') : '未配置 key'}
-    </div>
-    <div id="plan-${p.id}"></div>
-    <div style="display:grid;gap:7px;margin-top:11px">
-      <label class="sub">API Key
-        <input type="password" id="key-${p.id}" style="width:100%;cursor:text"
-               placeholder="${p.configured?'留空则保持不变':'填入 key'}" ${p.enabled?'':'disabled'}>
-      </label>
-      <label class="sub">Base URL
-        <input id="url-${p.id}" style="width:100%;cursor:text" value="${p.base_url}"
-               placeholder="${p.default_base_url||'https://...'}" ${p.enabled?'':'disabled'}>
-      </label>
-      <div style="display:flex;gap:7px">
-        <button class="primary" style="flex:1" onclick="saveProvider('${p.id}')" ${p.enabled?'':'disabled'}>保存</button>
-        <button onclick="testProvider('${p.id}')" ${p.enabled?'':'disabled'}>测试</button>
-        ${p.custom?`<button onclick="removeCustom('${p.id}')" title="删除">×</button>`:''}
-      </div>
-    </div>
-    <div id="pm-${p.id}" class="kpi-label" style="margin-top:8px"></div>
-  </div>`;
+      <div id="pm-${p.id}" class="kpi-label" style="margin-top:8px"></div>
+    </div>`;
   }).join('');
 }
 
 window.toggleProvider = async (pid, on) => {
-  // 乐观即时更新 UI：无需等待网络往返，立即切换按钮与卡片状态
-  const card = $(`bal-${pid}`)?.closest('.card');
+  const toggle = $(`toggle-${pid}`);
+  const card = toggle?.closest('.card');
   if (card) {
     card.classList.toggle('disabled-card', !on);
     const dot = card.querySelector('.dot');
-    if (dot) {
-      dot.className = 'dot ' + (!on ? 'off' : 'on');
-    }
+    if (dot) dot.className = 'dot ' + (!on ? 'off' : 'on');
     const stText = $(`st-${pid}`);
     if (stText) {
       stText.textContent = on ? '已开启' : '已关闭';
       stText.className = 'switch-text ' + (on ? 'good' : 'muted');
     }
-    const bal = $(`bal-${pid}`);
-    if (bal) {
-      bal.textContent = !on ? '已关闭' : (PROVIDERS.find(x=>x.id===pid)?.api_key_masked || '已配置');
-      bal.className = 'kpi sm ' + (!on ? 'muted' : 'good');
-    }
     card.querySelectorAll('input:not([type=checkbox]), button').forEach(el => el.disabled = !on);
   }
-  const r = await fetch(`/api/providers/${pid}/toggle`, {method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({enabled:on})}).then(x=>x.json()).catch(err=>({ok:false, error:String(err)}));
-  if (r.ok) { toast(`${on?'已开启':'已关闭'} ${PROVIDERS.find(x=>x.id===pid)?.name||pid}`); loadProviders(); }
-  else { toast('操作失败: '+(r.error||'未知错误'), 8000); loadProviders(); }
+  const r = await fetch(`/api/providers/${pid}/toggle`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled: on})
+  }).then(x => x.json()).catch(err => ({ok: false, error: String(err)}));
+
+  if (r.ok) {
+    toast(`${on ? '已开启' : '已关闭'} ${PROVIDERS.find(x => x.id === pid)?.name || pid}`);
+    loadProviders();
+  } else {
+    toast('操作失败: ' + (r.error || '未知错误'), 8000);
+    loadProviders();
+  }
 };
 
 window.saveProvider = async (pid) => {
-  const key = $('key-'+pid).value;
-  const url = $('url-'+pid).value;
+  const key = $('key-'+pid)?.value || '';
+  const url = $('url-'+pid)?.value || '';
   const body = {};
   if (key.trim()) body.api_key = key.trim();
   const p = PROVIDERS.find(x=>x.id===pid);
-  if (url.trim() && url.trim() !== p.base_url) body.base_url = url.trim();
+  if (url.trim() && url.trim() !== p?.base_url) body.base_url = url.trim();
   if (!Object.keys(body).length) { toast('没有改动'); return; }
   const r = await fetch(`/api/providers/${pid}/config`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(x=>x.json());
-  if (r.ok) { toast(`${p.name} 已保存并生效`); loadProviders(); }
+  if (r.ok) { toast(`${p?.name || pid} 已保存并生效`); loadProviders(); }
   else toast('保存失败: '+r.error, 8000);
 };
 
 window.testProvider = async (pid) => {
   const el = $('pm-'+pid);
+  if (!el) return;
   el.textContent = '测试中…';
-  const r = await fetch(`/api/providers/${pid}/models`, {method:'POST'}).then(x=>x.json());
+  const r = await fetch(`/api/providers/${pid}/models`, {method:'POST'}).then(x=>x.json()).catch(err=>({ok:false, error:String(err)}));
   if (r.ok) {
     el.className = 'kpi-label good';
-    el.textContent = `✓ 连通 · ${r.models.length} 个模型: ${r.models.slice(0,4).join(', ')}${r.models.length>4?' …':''}`;
+    el.textContent = `✓ 连通 · ${(r.models||[]).length} 个模型: ${(r.models||[]).slice(0,4).join(', ')}${(r.models||[]).length>4?' …':''}`;
   } else {
     el.className = 'kpi-label bad';
     el.textContent = '✗ ' + (r.error||'').slice(0,120);
@@ -1112,381 +2094,141 @@ window.removeCustom = async (pid) => {
   if (r.ok) { toast('已删除'); loadProviders(); } else toast('删除失败: '+r.error);
 };
 
-$('refreshProviders').onclick = loadProviders;
+if ($('refreshProviders')) $('refreshProviders').onclick = loadProviders;
 
+if ($('addCustomBtn')) {
+  $('addCustomBtn').onclick = () => {
+    const sec = $('customFormSec');
+    if (sec) sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
+  };
+}
+if ($('cfCancel')) $('cfCancel').onclick = () => { if ($('customFormSec')) $('customFormSec').style.display='none'; };
+if ($('cfSave')) {
+  $('cfSave').onclick = async () => {
+    const name = $('cfName')?.value.trim() || '', url = $('cfUrl')?.value.trim() || '', key = $('cfKey')?.value.trim() || '';
+    if (!name || !url) { toast('名称和 Base URL 必填'); return; }
+    const r = await fetch('/api/providers/custom', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name, base_url:url, api_key:key})}).then(x=>x.json());
+    if (r.ok) {
+      toast(`已添加 ${name}`);
+      if ($('cfName')) $('cfName').value='';
+      if ($('cfUrl')) $('cfUrl').value='';
+      if ($('cfKey')) $('cfKey').value='';
+      if ($('customFormSec')) $('customFormSec').style.display='none';
+      loadProviders();
+    } else toast('添加失败: '+r.error, 8000);
+  };
+}
+
+// --- 可用模型字典 ---
+let AVAIL_EXPANDED = new Set();
+
+async function loadAvail(force=false){
+  const q = force ? '?refresh=1' : '';
+  const r = await fetch('/api/models'+q).then(x=>x.json()).catch(()=>({}));
+  const providers = r.providers || [];
+  const errors = r.errors || {};
+  const total = providers.reduce((s,g)=>s+g.models.length, 0);
+  const errCount = Object.keys(errors).length;
+  if ($('availStatus')) {
+    $('availStatus').textContent = `${total} 个模型 · ${providers.length} 个厂商`
+      + (errCount ? ` · ${errCount} 个厂商拉取失败` : '')
+      + (r.age!=null ? ` · 缓存 ${Math.round(r.age)}s` : '');
+  }
+  const el = $('availGroups');
+  if (!el) return;
+  if (!providers.length && !errCount) {
+    el.innerHTML = '<div class="card empty">还没有配置任何厂商 — 请在上方配置 API key</div>';
+    return;
+  }
+  el.innerHTML = providers.map(g => {
+    const open = AVAIL_EXPANDED.has(g.id);
+    const badge = open ? '▾' : '▸';
+    const rows = g.models.map(m => `
+      <div class="avail-model" title="点击复制 ${m}" onclick="copyModel('${m}')">
+        <span class="mono">${m}</span>
+        <span class="avail-copy">复制</span>
+      </div>`).join('');
+    return `<div class="card avail-card">
+      <div class="avail-head" onclick="toggleAvail('${g.id}')">
+        <span class="avail-name">
+          <span class="muted" style="font-size:11px">${badge}</span>${g.name}
+          <span class="pill">${g.models.length}</span>
+        </span>
+        <span class="mono muted" style="font-size:11px">${g.id}</span>
+      </div>
+      <div class="avail-body ${open?'open':''}">${rows||'<div class="avail-model muted">无模型</div>'}</div>
+    </div>`;
+  }).join('') + Object.entries(errors).map(([pid,err]) => `
+    <div class="card avail-card">
+      <div class="avail-head" onclick="toggleAvail('${pid}')">
+        <span class="avail-name"><span class="muted" style="font-size:11px">▸</span>${pid}
+          <span class="pill warn-pill">失败</span></span>
+      </div>
+      <div class="avail-body"><div class="avail-model bad">${err}</div></div>
+    </div>`).join('');
+}
+
+window.toggleAvail = (id) => {
+  if (AVAIL_EXPANDED.has(id)) AVAIL_EXPANDED.delete(id);
+  else AVAIL_EXPANDED.add(id);
+  loadAvail();
+};
+
+window.copyModel = async (m) => {
+  try {
+    await navigator.clipboard.writeText(m);
+    toast(`已复制 ${m}`);
+  } catch(e) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = m; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast(`已复制 ${m}`);
+    } catch(e2) {
+      toast('复制失败，请手动复制');
+    }
+  }
+};
+if ($('refreshAvail')) $('refreshAvail').onclick = () => loadAvail(true);
+
+// ==================== 4. 网络与节点 (Network & Routing) ====================
 async function loadKernelConfig(){
   const r = await fetch('/api/kernel').then(x=>x.json()).catch(()=>null);
   if (!r || !r.ok) return;
-  $('kernelApi').value = r.kernel_api || '';
-  $('kernelProxy').value = r.proxy_url || '';
+  if ($('kernelApi')) $('kernelApi').value = r.kernel_api || '';
+  if ($('kernelProxy')) $('kernelProxy').value = r.proxy_url || '';
 }
-$('saveKernel').onclick = async () => {
-  const body = {};
-  const api = $('kernelApi').value.trim(), proxy = $('kernelProxy').value.trim();
-  if (api) body.kernel_api = api;
-  if (proxy) body.proxy_url = proxy;
-  const r = await fetch('/api/kernel', {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(body)}).then(x=>x.json());
-  const st = $('kernelStatus');
-  if (r.ok) {
-    st.textContent = `✓ 已保存：${r.kernel_api} / ${r.proxy_url}`;
-    st.className = 'sub good';
-    loadNodes();
-  } else {
-    st.textContent = '✗ ' + (r.error||'保存失败');
-    st.className = 'sub bad';
-  }
-};
-loadKernelConfig();
-$('addCustomBtn').onclick = () => {
-  const sec = $('customFormSec');
-  sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
-};
-$('cfCancel').onclick = () => { $('customFormSec').style.display='none'; };
-$('cfSave').onclick = async () => {
-  const name = $('cfName').value.trim(), url = $('cfUrl').value.trim(), key = $('cfKey').value.trim();
-  if (!name || !url) { toast('名称和 Base URL 必填'); return; }
-  const r = await fetch('/api/providers/custom', {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name, base_url:url, api_key:key})}).then(x=>x.json());
-  if (r.ok) {
-    toast(`已添加 ${name}`);
-    $('cfName').value=$('cfUrl').value=$('cfKey').value='';
-    $('customFormSec').style.display='none';
-    loadProviders();
-  } else toast('添加失败: '+r.error, 8000);
-};
 
-$('checkBalances').onclick = async () => {
-  for (const p of PROVIDERS.filter(x=>x.configured)) {
-    const b = await fetch(`/api/providers/${p.id}/balance`, {method:'POST'}).then(x=>x.json());
-    const el = $('bal-'+p.id);
-    if (!el) continue;
-    if (b.available === false) {
-      el.className='kpi sm bad';
-      el.textContent = '查询失败: ' + (b.error||'').slice(0,50);
-    } else if (b.kind==='balance') {
-      el.className='kpi sm good';
-      el.textContent = `${b.total} ${b.currency||''} 可用`;
-    } else if (b.kind==='plan') {
-      el.className='kpi sm';
-      el.textContent = '套餐额度';
-      renderPlanWindows(p.id, b.windows||[]);
-    } else {
-      el.className='kpi sm';
-      const note = (b.raw&&b.raw.note) || '无余额接口';
-      // 厂商给了控制台地址就做成可点的, 省得用户自己找
-      const url = b.raw && b.raw.console;
-      el.innerHTML = url
-        ? `${note}<br><a href="${url}" target="_blank" rel="noopener"
-             style="color:var(--accent);font-size:11px">打开控制台 ↗</a>`
-        : note;
-    }
-  }
-  toast('余额查询完成');
-};
-
-// 套餐制 (Kimi Coding Plan): 每个时间窗一条进度条, 显示已用百分比和重置时间
-window.renderPlanWindows = (pid, windows) => {
-  const box = $('plan-'+pid);
-  if (!box) return;
-  box.innerHTML = windows.map(w => {
-    const used = w.used_pct;
-    // 已用越多越危险: <50% 绿, <80% 黄, 否则红
-    const color = used==null ? 'var(--muted)'
-      : used<50 ? 'var(--good)' : used<80 ? 'var(--warn)' : 'var(--bad)';
-    const reset = w.reset_time ? new Date(w.reset_time).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : null;
-    const counts = (w.used!=null && w.limit!=null) ? ` <span class="muted">(${w.used}/${w.limit})</span>` : '';
-    return `<div style="margin-top:7px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11px">
-        <span>${w.label}${counts}</span>
-        <span class="mono" style="color:${color}">${used!=null?used+'% 已用':'—'}</span>
-      </div>
-      <div class="bar" style="margin-top:3px"><i style="width:${used??0}%;background:${color}"></i></div>
-      ${reset?`<div class="kpi-label">${reset} 重置</div>`:''}
-    </div>`;
-  }).join('');
-};
-
-let QUOTA_FAMILY = 'all';
-
-async function loadQuota(){
-  $('loadQuota').disabled = true; $('loadQuota').textContent='加载中…';
-  try {
-    const r = await fetch('/api/models/quota').then(x=>x.json());
+if ($('saveKernel')) {
+  $('saveKernel').onclick = async () => {
+    const body = {};
+    const api = $('kernelApi')?.value.trim(), proxy = $('kernelProxy')?.value.trim();
+    if (api) body.kernel_api = api;
+    if (proxy) body.proxy_url = proxy;
+    const r = await fetch('/api/kernel', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)}).then(x=>x.json()).catch(err=>({ok:false, error:String(err)}));
+    const st = $('kernelStatus');
     if (r.ok) {
-      MODELS = r.models;
-      renderQuota();
-      const avail = MODELS.filter(m=>m.remaining>0).length;
-      $('quotaSummary').textContent = `${MODELS.length} 个模型 · ${avail} 个有额度`;
-      toast(`已加载 ${MODELS.length} 个模型（最新代际优先）`);
-    } else toast('加载失败: '+r.error, 10000);
-  } finally { $('loadQuota').disabled=false; $('loadQuota').textContent='刷新配额'; }
-}
-
-function getModelGenBadge(mid, prov){
-  const m = mid.toLowerCase();
-  if (m.includes('claude') || prov.toLowerCase().includes('anthropic')) {
-    return '<span class="gen-badge claude">Claude 4.6</span>';
-  }
-  if (m.includes('gpt') || prov.toLowerCase().includes('openai')) {
-    return '<span class="gen-badge gpt">GPT</span>';
-  }
-  if (m.includes('3.8')) return '<span class="gen-badge g38">Gemini 3.8</span>';
-  if (m.includes('3.7')) return '<span class="gen-badge g37">Gemini 3.7</span>';
-  if (m.includes('3.6') || m.includes('3.5') || m.includes('3.1') || m.includes('gemini-3')) {
-    return '<span class="gen-badge g3">Gemini 3.x</span>';
-  }
-  if (m.includes('2.5')) return '<span class="gen-badge">Gemini 2.5</span>';
-  return '';
-}
-
-function quotaFiltered(){
-  const onlyAvail = $('onlyAvail').checked;
-  const onlyRec = $('onlyRec').checked;
-  const kw = ($('quotaSearch').value || '').trim().toLowerCase();
-  const sortMode = $('quotaSortSel').value;
-
-  let list = MODELS.filter(m => {
-    if (onlyAvail && (m.remaining == null || m.remaining <= 0)) return false;
-    if (onlyRec && !m.recommended) return false;
-
-    // 分类 Chip 过滤
-    if (QUOTA_FAMILY !== 'all') {
-      const mid = m.id.toLowerCase();
-      const prov = (m.provider || '').toLowerCase();
-      if (QUOTA_FAMILY === 'claude' && !(mid.includes('claude') || prov.includes('anthropic'))) return false;
-      if (QUOTA_FAMILY === 'gemini38' && !mid.includes('3.8')) return false;
-      if (QUOTA_FAMILY === 'gemini37' && !mid.includes('3.7')) return false;
-      if (QUOTA_FAMILY === 'gemini3' && !(mid.includes('3.1') || mid.includes('3.5') || mid.includes('3.6') || mid.includes('gemini-3'))) return false;
-      if (QUOTA_FAMILY === 'gemini25' && !mid.includes('2.5')) return false;
-      if (QUOTA_FAMILY === 'gpt' && !(mid.includes('gpt') || prov.includes('openai') || mid.startsWith('chat_') || mid.startsWith('tab_'))) return false;
-    }
-
-    // 关键词过滤
-    if (kw) {
-      const text = `${m.id} ${m.display_name || ''} ${m.provider || ''}`.toLowerCase();
-      if (!text.includes(kw)) return false;
-    }
-    return true;
-  });
-
-  // 排序
-  if (sortMode === 'remaining_desc') {
-    list.sort((a,b) => (b.remaining || 0) - (a.remaining || 0));
-  } else if (sortMode === 'remaining_asc') {
-    list.sort((a,b) => (a.remaining || 0) - (b.remaining || 0));
-  } else if (sortMode === 'speed_desc') {
-    list.sort((a,b) => ((BENCH[b.id]?.tokens_per_sec || 0) - (BENCH[a.id]?.tokens_per_sec || 0)));
-  } else if (sortMode === 'name_asc') {
-    list.sort((a,b) => a.id.localeCompare(b.id));
-  }
-  // smart 保持后端返回的高版本在前的自然顺序
-
-  return list;
-}
-
-// 厂商给的是内部枚举名 (MODEL_PROVIDER_GOOGLE), 转成人话
-function prettyProvider(p){
-  if (!p) return '';
-  return p.replace(/^MODEL_PROVIDER_/,'').toLowerCase()
-          .replace(/^\w/, c => c.toUpperCase());
-}
-
-function renderQuota(){
-  const list = quotaFiltered();
-  $('quotaRows').innerHTML = list.map(m => {
-    const b = BENCH[m.id] || {};
-    const picked = QUOTA_PICKS.has(m.id);
-    const pct = m.remaining;
-    const badge = getModelGenBadge(m.id, m.provider);
-    return `<tr class="${picked?'picked':''}">
-      <td><input type="checkbox" ${picked?'checked':''} onchange="toggleQuotaPick('${m.id}', this.checked)" style="cursor:pointer"></td>
-      <td>
-        <div style="display:flex;align-items:center;gap:6px">
-          ${badge}
-          <div class="mono" style="font-weight:600">${m.id}</div>
-        </div>
-        <div class="kpi-label" style="margin-top:2px">
-          ${m.display_name ? `<span style="color:var(--text);margin-right:6px">${m.display_name}</span>` : ''}
-          ${prettyProvider(m.provider)}
-          ${m.recommended?' <span class="pill">推荐</span>':''}
-          ${m.thinking?' <span class="pill">思考</span>':''}
-        </div>
-      </td>
-      <td><div style="display:flex;align-items:center;gap:8px">
-        <div class="bar" style="flex:1;margin:0"><i style="width:${pct??0}%;background:${pctColor(pct)}"></i></div>
-        <span class="mono" style="color:${pctColor(pct)};min-width:46px;text-align:right">${pct!=null?pct+'%':'—'}</span>
-      </div></td>
-      <td class="muted" style="font-size:11px">
-        ${(() => {
-          if (!m.reset_time) return '—';
-          const rDate = new Date(m.reset_time);
-          const diffMs = rDate - Date.now();
-          const fmtDate = rDate.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
-          if (diffMs <= 0) return `<span class="good" title="${fmtDate}">即将重置</span>`;
-          const mins = Math.ceil(diffMs / 60000);
-          const hrs = Math.floor(mins / 60);
-          const remMins = mins % 60;
-          const cd = hrs > 0 ? `${hrs}h ${remMins}m 后` : `${remMins}m 后`;
-          return `<span title="将在 ${fmtDate} 重置">${cd} <span style="opacity:0.6;font-size:10px">(${fmtDate})</span></span>`;
-        })()}
-      </td>
-      <td class="num">${b.ttft_ms!=null?(b.ttft_ms/1000).toFixed(1)+' s':'—'}</td>
-      <td class="num">${b.tokens_per_sec!=null?b.tokens_per_sec.toFixed(1):'—'}</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="6" class="empty">没有符合条件的模型</td></tr>';
-  // 让 BENCH 里已测过的模型也能显示速度 (从模型性能页拿基准数据)
-  fillBenchFromStats();
-}
-
-// 基准结果存在数据库里, 这里拉一次补到配额表的速度列
-async function fillBenchFromStats(){
-  try {
-    const r = await fetch('/api/usage/model_stats?hours=8760').then(x=>x.json());
-    let changed = false;
-    for (const s of (r.stats||[])) {
-      if (s.source!=='bench') continue;
-      if (!BENCH[s.model]) {
-        BENCH[s.model] = {ttft_ms: s.ttft && s.ttft.avg, tokens_per_sec: s.tps && s.tps.avg};
-        changed = true;
+      if (st) {
+        st.textContent = `✓ 已保存：${r.kernel_api} / ${r.proxy_url}`;
+        st.className = 'sub good';
+      }
+      loadNodes();
+    } else {
+      if (st) {
+        st.textContent = '✗ ' + (r.error||'保存失败');
+        st.className = 'sub bad';
       }
     }
-    if (changed) {
-      // 只重画数字列, 避免无限递归
-      for (const m of quotaFiltered()) {
-        const b = BENCH[m.id]; if (!b) continue;
-        const tr = [...document.querySelectorAll('#quotaRows tr')].find(
-          t => t.querySelector('.mono')?.textContent?.trim() === m.id);
-        if (tr) {
-          const tds = tr.querySelectorAll('td');
-          tds[4].textContent = b.ttft_ms!=null ? (b.ttft_ms/1000).toFixed(1)+' s' : '—';
-          tds[5].textContent = b.tokens_per_sec!=null ? b.tokens_per_sec.toFixed(1) : '—';
-        }
-      }
-    }
-  } catch(e) { /* 拿不到就算了, 不影响配额显示 */ }
-}
-
-window.toggleQuotaPick = (id, on) => {
-  if (on) QUOTA_PICKS.add(id); else QUOTA_PICKS.delete(id);
-  renderQuota();
-};
-$('loadQuota').onclick = loadQuota;
-$('onlyAvail').onchange = renderQuota;
-$('onlyRec').onchange = renderQuota;
-$('quotaSortSel').onchange = renderQuota;
-$('quotaSearch').oninput = renderQuota;
-
-// Chip 筛选点击事件
-document.querySelectorAll('#quotaFamilyChips .chip').forEach(chip => {
-  chip.onclick = () => {
-    document.querySelectorAll('#quotaFamilyChips .chip').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    QUOTA_FAMILY = chip.getAttribute('data-family');
-    renderQuota();
   };
-});
-
-$('qCheckAll').onchange = (e) => {
-  const list = quotaFiltered();
-  if (e.target.checked) list.forEach(m=>QUOTA_PICKS.add(m.id));
-  else list.forEach(m=>QUOTA_PICKS.delete(m.id));
-  renderQuota();
-};
-
-// 测试勾选的模型 (而不是写死"前 3 个推荐")
-async function runBench(models){
-  if (!models.length) { toast('先勾选要测的模型'); return; }
-  const btns = [$('benchSelected'), $('benchTop')];
-  btns.forEach(b=>b.disabled=true);
-  $('benchProgress').textContent = `0/${models.length}`;
-  const {job_id} = await fetch('/api/models/benchmark', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({models, max_tokens:2048})}).then(x=>x.json());
-  if (!job_id) { toast('启动失败'); btns.forEach(b=>b.disabled=false); return; }
-  while (true) {
-    const j = await fetch(`/api/models/benchmark/${job_id}`).then(x=>x.json());
-    Object.assign(BENCH, j.results);
-    $('mbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
-    $('benchProgress').textContent = `${j.done}/${j.total}`;
-    renderQuota();
-    if (j.status!=='running') break;
-    await new Promise(r=>setTimeout(r,600));
-  }
-  $('mbar').style.width='0%';
-  $('benchProgress').textContent = '完成';
-  btns.forEach(b=>b.disabled=false);
-  toast('基准测试完成 — 结果已写入「模型性能」页');
 }
 
-$('benchSelected').onclick = () => runBench([...QUOTA_PICKS]);
-$('benchTop').onclick = () => runBench(
-  MODELS.filter(m=>m.remaining>0).sort((a,b)=>(b.recommended-a.recommended)||(b.remaining-a.remaining)).slice(0,3).map(m=>m.id)
-);
-
-// ==================== Gemini 节点可用性检测 ====================
-$('nodeAttempts').onchange = (e) => { $('attemptsLabel').textContent = e.target.value; };
-
-$('checkNodes').onclick = async () => {
-  const picked = [...NODES.picked];
-  if (!picked.length) { toast('先在节点列表里勾选要测的节点'); return; }
-  const retest = $('retestChecked').checked;
-  if (!confirm(`将依次切换到 ${picked.length} 个节点测试 Gemini 可用性。\n` +
-               `每个节点测 ${$('nodeAttempts').value} 次，结束后自动切回当前节点。\n` +
-               (retest ? `\n注意：勾选了「重测已测过的」，会重复动用账号探测已有结论的节点。\n` : '') +
-               `\n继续？`)) return;
-  const btn = $('checkNodes'); btn.disabled = true;
-  $('nodeCheckStatus').textContent = '检测中…';
-  try {
-    const r = await fetch('/api/node/gemini_check', {method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({nodes:picked, attempts:+$('nodeAttempts').value,
-                           force:retest})}).then(x=>x.json());
-    if (!r.ok) { toast('启动失败: '+r.error); return; }
-    if ((r.skipped_tested||[]).length) toast(`已跳过 ${r.skipped_tested.length} 个检测过的节点`, 6000);
-    while (true) {
-      const j = await fetch(`/api/node/gemini_check/${r.job_id}`).then(x=>x.json());
-      $('ncbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
-      $('nodeCheckStatus').textContent = `${j.done}/${j.total} · ${j.current||''}`;
-      if (j.status!=='running') {
-        renderNodeCheckResults(j);
-        if (j.restore_error) toast('切回原节点失败: '+j.restore_error, 10000);
-        break;
-      }
-      await new Promise(res=>setTimeout(res,800));
-    }
-    await loadNodeChecks();
-    renderNodes();
-  } finally { btn.disabled=false; $('ncbar').style.width='0%'; }
-};
-
-function renderNodeCheckResults(job){
-  const entries = Object.entries(job.results||{});
-  $('nodeCheckResults').innerHTML = entries.length ? `<table style="font-size:12px;margin-top:11px">
-    <thead><tr><th>节点</th><th>出口 IP</th><th>结果</th><th>通过</th><th>累计</th></tr></thead>
-    <tbody>${entries.map(([n,r])=>{
-      const v = r.verdict;
-      const label = v==='ok' ? '<span class="good">可用</span>'
-        : v==='blocked' ? '<span class="bad">被地区限制</span>'
-        : v==='flaky' ? '<span class="warn">不稳定</span>' : '<span class="muted">未知</span>';
-      return `<tr><td class="mono">${n.replace(/^[^\|]*\|/,'')}</td>
-        <td class="muted mono">${r.ip||'—'} ${r.country?'· '+r.country:''}</td>
-        <td>${label}</td>
-        <td class="mono">${r.ok_count}/${r.attempts}</td>
-        <td class="muted mono">${r.total_fails}/${r.total_attempts} 失败</td></tr>`;
-    }).join('')}</tbody></table>` : '';
-}
-
-async function loadNodeChecks(){
-  try {
-    const r = await fetch('/api/node/checks').then(x=>x.json());
-    NODES.checks = r.checks || {};
-  } catch(e) { NODES.checks = {}; }
-}
-
-// ==================== 节点测速 ====================
 let NODES = { selector:null, current:null, list:[], delays:{}, expanded:new Set(),
-              picked:new Set(), checks:{}, unsupported:new Set() };
-let QUOTA_PICKS = new Set();      // 勾选要测的 Antigravity 模型
+              picked:new Set(), checks:{}, unsupported:new Set(),
+              lastSet:null, silenceUntil:0, jobRunning:false, externalChange:null };
 
 function latClass(d){ return d==null?'bad': d<150?'good': d<400?'warn':'bad'; }
 function latColor(d){ return d==null?'var(--muted)': d<150?'var(--good)': d<400?'var(--warn)':'var(--bad)'; }
@@ -1500,31 +2242,30 @@ async function loadNodes(){
   const r = await fetch('/api/status').then(x=>x.json()).catch(()=>null);
   if (!r || !r.ok) {
     const api = r?.kernel_api || 'http://127.0.0.1:12440';
-    $('nodeStatus').innerHTML = '<span class="bad">代理内核不可达</span>';
-    $('regionGrid').innerHTML = `<div class="card" style="grid-column:1/-1">
-      <div class="card-t bad" style="margin-bottom:9px">连不上代理内核</div>
-      <div class="sub" style="line-height:1.8">
-        正在连 <span class="mono">${api}</span>${r?.error?' — '+r.error:''}<br>
-        <br>这个页面需要 <b>Clash 风格的本地控制 API</b>。常见客户端：
-        <br>· <b>SakuraCat</b> — 默认 <span class="mono">12440</span> / 代理 <span class="mono">12450</span>（即当前默认值）
-        <br>· <b>Clash Verge / mihomo</b> — 通常是 <span class="mono">9090</span> / 代理 <span class="mono">7890</span>
-        <br>· <b>ClashX / Clash for Windows</b> — 通常是 <span class="mono">9090</span> / <span class="mono">7890</span>
-        <br><br>换客户端时，两种改法：
-        <br>· 在「<b>厂商配置 → 代理内核</b>」里直接填，保存立即生效
-        <br>· 或启动网关前设环境变量：
-        <br><span class="mono">CLASH_API=http://127.0.0.1:9090</span>
-        <br><span class="mono">CLASH_PROXY=http://127.0.0.1:7890</span>
-        <br><br><b>不支持的</b>：V2Ray / Xray / Shadowsocks / WireGuard 这类没有
-        Clash 控制 API 的客户端 —— 它们只能在系统层面配代理，
-        没有"列出节点、切换节点、单节点测速"这些接口，所以本页无法驱动它们。
-      </div>
-    </div>`;
+    if ($('nodeStatus')) $('nodeStatus').innerHTML = '<span class="bad">代理内核不可达</span>';
+    if ($('regionGrid')) {
+      $('regionGrid').innerHTML = `<div class="card" style="grid-column:1/-1">
+        <div class="card-t bad" style="margin-bottom:9px">连不上代理内核</div>
+        <div class="sub" style="line-height:1.8">
+          正在连 <span class="mono">${api}</span>${r?.error?' — '+r.error:''}<br>
+          <br>这个页面需要 <b>Clash 风格的本地控制 API</b>。常见客户端：
+          <br>· <b>SakuraCat</b> — 默认 <span class="mono">12440</span> / 代理 <span class="mono">12450</span>（即当前默认值）
+          <br>· <b>Clash Verge / mihomo</b> — 通常是 <span class="mono">9090</span> / 代理 <span class="mono">7890</span>
+          <br>· <b>ClashX / Clash for Windows</b> — 通常是 <span class="mono">9090</span> / <span class="mono">7890</span>
+          <br><br>换客户端时，两种改法：
+          <br>· 在「<b>代理内核配置</b>」里直接填，保存立即生效
+          <br>· 或启动网关前设环境变量：
+          <br><span class="mono">CLASH_API=http://127.0.0.1:9090</span>
+          <br><span class="mono">CLASH_PROXY=http://127.0.0.1:7890</span>
+        </div>
+      </div>`;
+    }
     return;
   }
   NODES.selector = r.selector; NODES.current = r.current; NODES.list = r.nodes;
   NODES.unsupported = new Set(r.gemini_unsupported_regions || []);
   await loadNodeChecks();
-  $('nodeStatus').innerHTML = `<b>${r.kernel.version}</b> · 当前 <b>${r.current}</b> · 共 <b>${r.nodes.length}</b> 节点`;
+  if ($('nodeStatus')) $('nodeStatus').innerHTML = `<b>${r.kernel.version}</b> · 当前 <b>${r.current}</b> · 共 <b>${r.nodes.length}</b> 节点`;
   renderNodes();
 }
 
@@ -1553,7 +2294,7 @@ function regionStats(){
 function renderNodes(){
   const map = regionStats();
   let groups = Object.values(map);
-  const mode = $('sortModeSel').value;
+  const mode = $('sortModeSel')?.value || 'region';
 
   if (mode === 'latency') groups.sort((a,b)=>{
     if(a.best==null&&b.best==null) return a.region.localeCompare(b.region);
@@ -1562,67 +2303,69 @@ function renderNodes(){
   else if (mode === 'status') groups.sort((a,b)=> (b.ok-a.ok) || ((a.best??9999)-(b.best??9999)));
   else groups.sort((a,b)=> a.region.localeCompare(b.region,'zh'));
 
-  // 顶部 KPI
   const totalOk = groups.reduce((s,g)=>s+g.ok,0);
   const allLat = groups.flatMap(g=>g.latencies);
   const fastest = allLat.length ? Math.min(...allLat) : null;
   const avgAll = allLat.length ? Math.round(allLat.reduce((a,b)=>a+b,0)/allLat.length) : null;
-  $('nodeKpis').innerHTML = `
-    ${kpiCard('可用节点', `${totalOk} / ${NODES.list.length}`, `已测 ${allLat.length + groups.reduce((s,g)=>s+g.fail,0)} 个`)}
-    ${kpiCard('最快延迟', fastest!=null?fastest+' ms':'—', '所有节点中的最小值')}
-    ${kpiCard('平均延迟', avgAll!=null?avgAll+' ms':'—', '可用节点的平均值')}
-    ${kpiCard('地区数', groups.length, '点卡片展开节点列表')}
-  `;
 
-  // 地区卡片网格
-  $('regionGrid').innerHTML = groups.map(g => {
-    const open = NODES.expanded.has(g.region);
-    const bestCls = latClass(g.best);
-    const ratio = g.total ? (g.ok/g.total*100) : 0;
-    return `<div class="card" style="padding:0;overflow:hidden">
-      <div style="padding:14px 16px;cursor:pointer" onclick="toggleRegion('${g.region}')">
-        <div class="card-h" style="margin-bottom:9px">
-          <div class="card-t"><span class="muted" style="font-size:11px">${open?'▾':'▸'}</span>${g.region}</div>
-          <span class="pill">${g.total} 个</span>
+  if ($('nodeKpis')) {
+    $('nodeKpis').innerHTML = `
+      ${kpiCard('可用节点', `${totalOk} / ${NODES.list.length}`, `已测 ${allLat.length + groups.reduce((s,g)=>s+g.fail,0)} 个`)}
+      ${kpiCard('最快延迟', fastest!=null?fastest+' ms':'—', '所有节点中的最小值')}
+      ${kpiCard('平均延迟', avgAll!=null?avgAll+' ms':'—', '可用节点的平均值')}
+      ${kpiCard('地区数', groups.length, '点卡片展开节点列表')}
+    `;
+  }
+
+  if ($('regionGrid')) {
+    $('regionGrid').innerHTML = groups.map(g => {
+      const open = NODES.expanded.has(g.region);
+      const bestCls = latClass(g.best);
+      const ratio = g.total ? (g.ok/g.total*100) : 0;
+      return `<div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:14px 16px;cursor:pointer" onclick="toggleRegion('${g.region}')">
+          <div class="card-h" style="margin-bottom:9px">
+            <div class="card-t"><span class="muted" style="font-size:11px">${open?'▾':'▸'}</span>${g.region}</div>
+            <span class="pill">${g.total} 个</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:9px">
+            <span class="kpi ${bestCls}">${g.best!=null?g.best:'—'}</span>
+            <span class="kpi-label" style="margin:0">ms 最快</span>
+            ${g.avg!=null?`<span class="muted" style="font-size:11px;margin-left:auto">平均 ${g.avg}ms</span>`:''}
+          </div>
+          <div class="bar" style="margin-top:9px">
+            <i style="width:${ratio.toFixed(0)}%;background:${ratio>70?'var(--good)':ratio>30?'var(--warn)':'var(--bad)'}"></i>
+          </div>
+          <div class="kpi-label">${g.ok} 可用${g.fail?` · <span class="bad">${g.fail} 失败</span>`:''}${g.untested?` · ${g.untested} 未测`:''}</div>
         </div>
-        <div style="display:flex;align-items:baseline;gap:9px">
-          <span class="kpi ${bestCls}">${g.best!=null?g.best:'—'}</span>
-          <span class="kpi-label" style="margin:0">ms 最快</span>
-          ${g.avg!=null?`<span class="muted" style="font-size:11px;margin-left:auto">平均 ${g.avg}ms</span>`:''}
+        <div id="rg-${encodeURIComponent(g.region)}" style="display:${open?'block':'none'};border-top:1px solid var(--border)">
+          ${g.nodes.map(n=>{
+            const r = NODES.delays[n.name]||{}; const d=r.delay;
+            const isCur = n.name===NODES.current;
+            const short = n.name.replace(/^[^\|]*\|/,'');
+            const chk = NODES.checks[n.name];
+            const checked = NODES.picked.has(n.name);
+            const badge = !chk ? (NODES.unsupported.has(n.region)
+                ? `<span class="pill" title="该地区在 Google 地区限制先验名单内, 默认不选入检测">地区存疑</span>` : '') :
+              chk.verdict==='blocked' ? `<span class="pill bad-pill" title="Google 地区限制: ${(chk.error||'').slice(0,90)}">✗ Gemini</span>` :
+              chk.verdict==='flaky'   ? `<span class="pill warn-pill" title="${chk.fails}/${chk.attempts} 次失败">⚠ Gemini</span>` :
+              chk.verdict==='ok'      ? `<span class="pill good-pill" title="Gemini 可用 (${chk.attempts-chk.fails}/${chk.attempts} 通过)">✓ Gemini</span>` : '';
+            return `<div class="noderow">
+              <input type="checkbox" ${checked?'checked':''} onchange="togglePick('${encodeURIComponent(n.name)}', this.checked)">
+              <span class="nodename" title="${n.name}">
+                ${short}${isCur?' <span class="pill" style="border-color:var(--accent);color:var(--accent)">当前</span>':''}
+              </span>
+              ${badge}
+              <span class="mono lat" style="color:${latColor(d)}">${d!=null?d+'ms':'—'}</span>
+              <button style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();switchNode('${encodeURIComponent(n.name)}')" ${isCur?'disabled':''}>切换</button>
+              <button style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();checkIp('${encodeURIComponent(n.name)}')">IP</button>
+            </div>`;
+          }).join('')}
         </div>
-        <div class="bar" style="margin-top:9px">
-          <i style="width:${ratio.toFixed(0)}%;background:${ratio>70?'var(--good)':ratio>30?'var(--warn)':'var(--bad)'}"></i>
-        </div>
-        <div class="kpi-label">${g.ok} 可用${g.fail?` · <span class="bad">${g.fail} 失败</span>`:''}${g.untested?` · ${g.untested} 未测`:''}</div>
-      </div>
-      <div id="rg-${encodeURIComponent(g.region)}" style="display:${open?'block':'none'};border-top:1px solid var(--border)">
-        ${g.nodes.map(n=>{
-          const r = NODES.delays[n.name]||{}; const d=r.delay;
-          const isCur = n.name===NODES.current;
-          const short = n.name.replace(/^[^\|]*\|/,'');
-          const chk = NODES.checks[n.name];
-          const checked = NODES.picked.has(n.name);
-          // 检测结论: blocked 明确标记, flaky 提示不稳, ok 打勾;
-          // 没测过但地区在限制名单内的标"地区存疑" (先验, 不是实测结论)
-          const badge = !chk ? (NODES.unsupported.has(n.region)
-              ? `<span class="pill" title="该地区在 Google 地区限制先验名单内, 默认不选入检测 (仍可手动勾选实测)">地区存疑</span>` : '') :
-            chk.verdict==='blocked' ? `<span class="pill bad-pill" title="Google 地区限制: ${(chk.error||'').slice(0,90)}">✗ Gemini</span>` :
-            chk.verdict==='flaky'   ? `<span class="pill warn-pill" title="${chk.fails}/${chk.attempts} 次失败">⚠ Gemini</span>` :
-            chk.verdict==='ok'      ? `<span class="pill good-pill" title="Gemini 可用 (${chk.attempts-chk.fails}/${chk.attempts} 通过)">✓ Gemini</span>` : '';
-          return `<div class="noderow">
-            <input type="checkbox" ${checked?'checked':''} onchange="togglePick('${encodeURIComponent(n.name)}', this.checked)">
-            <span class="nodename" title="${n.name}">
-              ${short}${isCur?' <span class="pill" style="border-color:var(--accent);color:var(--accent)">当前</span>':''}
-            </span>
-            ${badge}
-            <span class="mono lat" style="color:${latColor(d)}">${d!=null?d+'ms':'—'}</span>
-            <button style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();switchNode('${encodeURIComponent(n.name)}')" ${isCur?'disabled':''}>切换</button>
-            <button style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();checkIp('${encodeURIComponent(n.name)}')">IP</button>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }).join('');
+      </div>`;
+    }).join('');
+  }
+  renderKernelWarn();
 }
 
 window.toggleRegion = (region) => {
@@ -1634,74 +2377,184 @@ window.toggleRegion = (region) => {
 window.switchNode = async (enc) => {
   const node = decodeURIComponent(enc);
   const r = await fetch('/api/switch', {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({group:NODES.selector, node})}).then(x=>x.json());
-  if (r.ok) { NODES.current = r.now; toast('已切换到 '+node); renderNodes(); }
-  else toast('切换失败: '+r.error);
+    body:JSON.stringify({group:NODES.selector, node})}).then(x=>x.json()).catch(err=>({ok:false, error:String(err)}));
+  if (r.ok) {
+    NODES.current = r.now; NODES.lastSet = r.now;
+    NODES.silenceUntil = Date.now()+8000;
+    toast('已切换到 '+node); renderNodes();
+  } else toast('切换失败: '+(r.error||'未知错误'));
 };
 
 window.checkIp = async (enc) => {
   const node = decodeURIComponent(enc);
+  NODES.silenceUntil = Date.now()+15000;
   toast('正在检测 '+node+' 的出口 IP…', 20000);
   const r = await fetch('/api/ip_check', {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({group:NODES.selector, node})}).then(x=>x.json());
+    body:JSON.stringify({group:NODES.selector, node})}).then(x=>x.json()).catch(err=>({ok:false, error:String(err)}));
   if (r.ok) { const g=r.geo; toast(`出口 ${g.query}\n${g.country} ${g.city} · ${g.isp}\n${g.as}`, 15000); }
   else toast('检测失败: '+r.error, 10000);
 };
 
+async function pollNodeCurrent(){
+  if (!NODES.selector || NODES.jobRunning) return;
+  try {
+    const r = await fetch('/api/node/selected').then(x=>x.json());
+    if (!r.ok || r.current === NODES.current) return;
+    const mine = (r.current === NODES.lastSet) || (Date.now() < NODES.silenceUntil);
+    if (!mine) NODES.externalChange = {from:NODES.current, to:r.current};
+    NODES.current = r.current;
+    renderNodes();
+  } catch(e) {}
+}
+
+function renderKernelWarn(){
+  const el = $('kernelWarn'); if (!el) return;
+  if (!NODES.externalChange) { el.style.display='none'; return; }
+  const short = s => (s||'?').replace(/^[^\|]*\|/,'');
+  const {from, to} = NODES.externalChange;
+  el.innerHTML = `<span class="warn">⚠ 内核节点选择被外部修改：${short(from)} → ${short(to)}</span>
+    <span class="muted">（非本仪表盘操作。VPN 客户端界面不会同步此改动，它下次切换或重连时会用旧选择覆盖内核。）</span>
+    <button style="padding:2px 8px;font-size:11px" onclick="dismissKernelWarn()">知道了</button>`;
+  el.style.display = '';
+}
+window.dismissKernelWarn = () => { NODES.externalChange = null; renderKernelWarn(); };
+
 async function runNodeBatch(nodes){
   if (!nodes.length) { toast('没有要测的节点'); return; }
-  $('testAll').disabled = $('testFailed').disabled = true;
+  if ($('testAll')) $('testAll').disabled = true;
+  if ($('testFailed')) $('testFailed').disabled = true;
   const {job_id} = await fetch('/api/test', {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({nodes:nodes.map(n=>n.name||n), timeout:$('timeoutSel').value})}).then(x=>x.json());
-  if (!job_id) { toast('启动失败'); $('testAll').disabled=$('testFailed').disabled=false; return; }
+    body:JSON.stringify({nodes:nodes.map(n=>n.name||n), timeout:$('timeoutSel')?.value||5000})}).then(x=>x.json());
+  if (!job_id) {
+    toast('启动失败');
+    if ($('testAll')) $('testAll').disabled = false;
+    if ($('testFailed')) $('testFailed').disabled = false;
+    return;
+  }
   let last = 0;
   while (true) {
     const j = await fetch(`/api/test/${job_id}`).then(x=>x.json());
     Object.assign(NODES.delays, j.results);
-    $('nbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
+    if ($('nbar')) $('nbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
     if (j.done-last>=5 || j.status!=='running') { last=j.done; renderNodes(); }
     if (j.status!=='running') break;
     await new Promise(r=>setTimeout(r,300));
   }
-  renderNodes(); $('nbar').style.width='0%';
-  $('testAll').disabled = $('testFailed').disabled = false;
+  renderNodes();
+  if ($('nbar')) $('nbar').style.width='0%';
+  if ($('testAll')) $('testAll').disabled = false;
+  if ($('testFailed')) $('testFailed').disabled = false;
   const ok = Object.values(NODES.delays).filter(r=>r.delay!=null).length;
   toast(`测速完成 · ${ok} 个可用`);
 }
 
-$('testAll').onclick = () => runNodeBatch(NODES.list);
-$('testFailed').onclick = () => runNodeBatch(NODES.list.filter(n=>{
+if ($('testAll')) $('testAll').onclick = () => runNodeBatch(NODES.list);
+if ($('testFailed')) $('testFailed').onclick = () => runNodeBatch(NODES.list.filter(n=>{
   const r=NODES.delays[n.name]; return r && (r.error || r.delay==null);
 }));
-$('collapseAll').onclick = () => { NODES.expanded.clear(); renderNodes(); };
-$('sortModeSel').onchange = renderNodes;
-$('selectAllNodes').onclick = () => {
-  // 每轮每个地区最多抽 2 个候选: 地区风控按国家判, 一个地区抽几个就能定基调,
-  // 没必要一轮把 100+ 节点全过一遍 (检测会真实动用 Google 账号).
-  // 轮次之间自然轮换 (测过的下轮不再入选), 逐步覆盖; 勾了"重测已测过的"才带上老节点.
-  // 地区限制名单内的节点始终不主动选 (先验, 用户仍可手动勾选强测).
-  const retest = $('retestChecked').checked;
-  let skippedRegion = 0;
-  const perRegion = {};
-  NODES.list.forEach(n=>{
-    if (!retest && NODES.checks[n.name]) return;
-    if (NODES.unsupported.has(n.region)) { skippedRegion++; return; }
-    (perRegion[n.region] = perRegion[n.region] || []).push(n.name);
-  });
-  Object.values(perRegion).forEach(names=>{
-    names.slice(0, 2).forEach(n=>NODES.picked.add(n));
-  });
-  renderNodes();
-  const parts = [`已勾选 ${NODES.picked.size} 个节点 (每地区至多 2 个)`];
-  if (skippedRegion) parts.push(`${skippedRegion} 个受限地区已跳过`);
-  if (!retest) parts.push('已测过的不重测');
-  toast(parts.join(' · '));
-};
-$('clearNodes').onclick = () => { NODES.picked.clear(); renderNodes(); };
+if ($('collapseAll')) $('collapseAll').onclick = () => { NODES.expanded.clear(); renderNodes(); };
+if ($('sortModeSel')) $('sortModeSel').onchange = renderNodes;
 
-// ---------- 启动 ----------
-loadUsage();
-setInterval(() => { if ($('p-usage').classList.contains('active')) loadUsage(); }, 30000);
+if ($('selectAllNodes')) {
+  $('selectAllNodes').onclick = () => {
+    const retest = $('retestChecked')?.checked ?? false;
+    let skippedRegion = 0;
+    const perRegion = {};
+    NODES.list.forEach(n=>{
+      if (!retest && NODES.checks[n.name]) return;
+      if (NODES.unsupported.has(n.region)) { skippedRegion++; return; }
+      (perRegion[n.region] = perRegion[n.region] || []).push(n.name);
+    });
+    Object.values(perRegion).forEach(names=>{
+      names.slice(0, 2).forEach(n=>NODES.picked.add(n));
+    });
+    renderNodes();
+    const parts = [`已勾选 ${NODES.picked.size} 个节点 (每地区至多 2 个)`];
+    if (skippedRegion) parts.push(`${skippedRegion} 个受限地区已跳过`);
+    if (!retest) parts.push('已测过的不重测');
+    toast(parts.join(' · '));
+  };
+}
+if ($('clearNodes')) $('clearNodes').onclick = () => { NODES.picked.clear(); renderNodes(); };
+
+// --- Gemini 节点风控检测 ---
+if ($('nodeAttempts')) $('nodeAttempts').onchange = (e) => { if ($('attemptsLabel')) $('attemptsLabel').textContent = e.target.value; };
+
+if ($('checkNodes')) {
+  $('checkNodes').onclick = async () => {
+    const picked = [...NODES.picked];
+    if (!picked.length) { toast('先在节点列表里勾选要测的节点'); return; }
+    const retest = $('retestChecked')?.checked ?? false;
+    if (!confirm(`将依次切换到 ${picked.length} 个节点测试 Gemini 可用性。\n` +
+                 `每个节点测 ${$('nodeAttempts')?.value || 3} 次，结束后自动切回当前节点。\n` +
+                 (retest ? `\n注意：勾选了「重测已测过的」，会重复动用账号探测已有结论的节点。\n` : '') +
+                 `\n继续？`)) return;
+    const btn = $('checkNodes'); btn.disabled = true;
+    if ($('nodeCheckStatus')) $('nodeCheckStatus').textContent = '检测中…';
+    try {
+      const r = await fetch('/api/node/gemini_check', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({nodes:picked, attempts:+($('nodeAttempts')?.value||3),
+                             force:retest})}).then(x=>x.json());
+      if (!r.ok) { toast('启动失败: '+r.error); return; }
+      if ((r.skipped_tested||[]).length) toast(`已跳过 ${r.skipped_tested.length} 个检测过的节点`, 6000);
+      NODES.jobRunning = true;
+      while (true) {
+        const j = await fetch(`/api/node/gemini_check/${r.job_id}`).then(x=>x.json());
+        if ($('ncbar')) $('ncbar').style.width = `${(j.done/j.total*100).toFixed(0)}%`;
+        if ($('nodeCheckStatus')) $('nodeCheckStatus').textContent = `${j.done}/${j.total} · ${j.current||''}`;
+        if (j.status!=='running') {
+          renderNodeCheckResults(j);
+          if (j.restore_error) toast('切回原节点失败: '+j.restore_error, 10000);
+          break;
+        }
+        await new Promise(res=>setTimeout(res,800));
+      }
+    } finally {
+      NODES.jobRunning = false;
+      btn.disabled=false;
+      if ($('ncbar')) $('ncbar').style.width='0%';
+      await loadNodeChecks(); await loadNodes(); renderNodes();
+    }
+  };
+}
+
+function renderNodeCheckResults(job){
+  const entries = Object.entries(job.results||{});
+  const el = $('nodeCheckResults');
+  if (!el) return;
+  el.innerHTML = entries.length ? `<table style="font-size:12px;margin-top:11px">
+    <thead><tr><th>节点</th><th>出口 IP</th><th>结果</th><th>通过</th><th>累计</th></tr></thead>
+    <tbody>${entries.map(([n,r])=>{
+      const v = r.verdict;
+      const label = v==='ok' ? '<span class="good">可用</span>'
+        : v==='blocked' ? '<span class="bad">被地区限制</span>'
+        : v==='flaky' ? '<span class="warn">不稳定</span>' : '<span class="muted">未知</span>';
+      return `<tr><td class="mono">${n.replace(/^[^\|]*\|/,'')}</td>
+        <td class="muted mono">${r.ip||'—'} ${r.country?'· '+r.country:''}</td>
+        <td>${label}</td>
+        <td class="mono">${r.ok_count}/${r.attempts}</td>
+        <td class="muted mono">${r.total_fails}/${r.total_attempts} 失败</td></tr>`;
+    }).join('')}</tbody></table>` : '';
+}
+
+async function loadNodeChecks(){
+  try {
+    const r = await fetch('/api/node/checks').then(x=>x.json());
+    NODES.checks = r.checks || {};
+  } catch(e) { NODES.checks = {}; }
+}
+
+// ==================== 页面启动 ====================
+switchTab('assets');
+loadProviders();
+setInterval(() => {
+  if (CURRENT_TAB === 'observe') loadUsage();
+  else if (CURRENT_TAB === 'assets') loadAssets();
+}, 30000);
+setInterval(() => {
+  if (CURRENT_TAB === 'network') pollNodeCurrent();
+}, 5000);
 </script>
 </body>
 </html>
